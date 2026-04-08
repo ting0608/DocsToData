@@ -4,3 +4,7 @@ __pycache__/
 *.pyc
 .env
 data/
+
+# Ignore any file/folder name containing "[private]"
+# 忽略名稱包含 "[private]" 的任何檔案或資料夾
+**/*[[]private[]]*
