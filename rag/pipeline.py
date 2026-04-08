@@ -55,6 +55,7 @@ class RagPipeline:
         中文: 作為在 FAISS 進行檢索的查詢向量。
         """
 
+# During this time, we call openai embedding model to embed the question into a vector so that we can search from index
         response = self.client.embeddings.create(
             model=self.settings.openai_embed_model,
             input=text,
@@ -102,6 +103,8 @@ class RagPipeline:
         """
 
         store = FaissStore.load(in_dir=in_dir, dim=self.settings.vector_dim)
+
+        # This is the key to embed the question into a vector so that we can search the index, refer to "embed_query" function
         query_vec = self.embed_query(question)
         return store.search(query_vec, top_k=top_k)
 

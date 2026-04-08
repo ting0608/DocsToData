@@ -41,6 +41,7 @@ def main() -> None:
     args = parser.parse_args()
     rag = RagPipeline()
 
+# Ingest here will chunk the pdf and save the chunks to the index directory
     if args.command == "ingest":
         stats = rag.ingest_pdf(
             pdf_path=args.pdf,
@@ -51,6 +52,7 @@ def main() -> None:
         print(json.dumps({"status": "ok", "ingest": stats}, ensure_ascii=False, indent=2))
         return
 
+# Query here will retrieve the chunks from the index directory and answer the question
     if args.command == "query":
         result = rag.answer(
             question=args.question,

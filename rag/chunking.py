@@ -54,6 +54,8 @@ def chunk_pages(
             text = encoder.decode(token_slice).strip()
             if not text:
                 continue
+
+            # This is to generate the unique chunk id for the chunk so that we can trace it back
             chunk_id = f"{source_name}-p{page_no:04d}-c{chunk_idx:04d}"
             chunks.append(Chunk(chunk_id=chunk_id, source=source_name, page=page_no, text=text))
     return chunks
