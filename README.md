@@ -31,6 +31,35 @@ Python-first RAG starter using OpenAI + FAISS, plus local Ollama + FAISS.
 4. Query with local chat model:
    - `python -m rag_local.cli query --question "What is this document about?"`
 
+## FastAPI backend (localhost)
+
+1. Start server:
+   - `uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000`
+2. Health check:
+   - `GET http://localhost:8000/health`
+3. Swagger docs:
+   - `http://localhost:8000/docs`
+
+### Example API requests (Postman)
+
+- `POST http://localhost:8000/ingest`
+```json
+{
+  "provider": "ollama",
+  "pdf_path": "/Users/tingcccc/Desktop/all those paperworks/Go Daikin Phase 4/Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4.pdf"
+}
+```
+
+- `POST http://localhost:8000/query`
+```json
+{
+  "provider": "ollama",
+  "question": "What is this document about?"
+}
+```
+
+Use `"provider": "openai"` to run the OpenAI pipeline instead.
+
 ## Project structure
 
 - `rag/pdf_parser.py`: extracts page text from PDF via PyMuPDF

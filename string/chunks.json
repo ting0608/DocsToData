@@ -1,0 +1,68 @@
+[
+  {
+    "chunk_id": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4-p0001-c0001",
+    "source": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4",
+    "page": 1,
+    "text": "MOBILE APP DESIGN\n& DEVELOPMENT PROJECT\nPROPOSAL\nProject Title: Go Daikin Mobile App (Phase 4)\nRevision: 1.4\nRevised on: 06 December 2024\nPrepared for: Teoh Kuang Yee, Daikin Malaysia Sdn. Bhd.\nPrepared by: Adrian Ching, Upstack Studio Sdn. Bhd."
+  },
+  {
+    "chunk_id": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4-p0002-c0001",
+    "source": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4",
+    "page": 2,
+    "text": "Scopes\nThe list below lays out the scope of work that will be carried out throughout\nthe entire course of this project.\nUser Interface/Experience Design\nThe visual aspect of the mobile app will be designed with high fidelity. Visual\nrepresentations/ interpretations for each page will be produced to illustrate the idea of\nwhat the final product will look like.\nDeliverables: Prototype (Figma).\nFrontend Development\nAfter all visual designs have been finalized, the designs will be converted into working\nmobile applications using React Native. We will be working closely with the Daikin\nMalaysia team for the development of the serverless backend on AWS that will be used\nto communicate with the mobile app.\nTesting & Staging\nThe mobile app will be deployed using Bitrise so that you and your team can test the\nmobile application constantly throughout the project.\nDeployment\nOnce the mobile app is ready to be released, it will be deployed to the Google Play\nStore, Apple Appstore, and Huawei AppGallery.\nUpstack Studio Sdn. Bhd. - https://upstackstudio.com - contact@upstackstudio.com\n2"
+  },
+  {
+    "chunk_id": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4-p0003-c0001",
+    "source": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4",
+    "page": 3,
+    "text": "Optional Scopes\nThe following list indicates optional scopes that could be included in this project.\nMaintenance\nAny changes to the mobile app following the launch that fall out of the project scope\nshall be deemed as additional maintenance works and will be charged separately.\nA quotation can be drafted depending on the maintenance work involved or a monthly or\nyearly maintenance plan can be discussed separately.\nUpstack Studio offers a few retainer packages depending on our client’s needs. Pricing is\nas listed in the table below:\nContract Length \\ Max\nHours per Month\nFull Month\n80 hours\n40 hours\n6 Months\nMYR\n28,800/month\nMYR 14,400/month\nMYR 7,200/month\n12 Months\nMYR\n24,000/month\nMYR 12,000/month\nMYR 6,000/month\nPricing in the table above is per month per developer. Extra hours will be billable at the\nrate of RM180 per hour per designer/developer. If more hours are required each month,\nfeel free to reach out and discuss our custom retainer package.\nUpstack Studio Sdn. Bhd. - https://upstackstudio.com - contact@upstackstudio.com\n3"
+  },
+  {
+    "chunk_id": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4-p0004-c0001",
+    "source": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4",
+    "page": 4,
+    "text": "Project Management\nUpstack Studio practices agile software development. We use a development process\ncalled Scrum. The entire project is broken down into multiple 2-week-long Sprints. The\ngoal is to develop a deployable segment that clients can view and test what has been\ncompleted during the Sprint Review.\nSprint Planning and Review will be held bi-weekly via Google Hangout. The purpose of\nthe meeting is to review work done for the sprint and to plan for the following sprint.\nAfter the Sprint Review, the client will be given 5 working days to test the features and\nreport any bugs. If no bugs are reported, features will be marked as completed.\nProject Timeline\nDesign\nEstimated Project Timeline\nDay(s)\nGo Daikin Mobile App + Tablet (Phase 4)\n55\nDevelopment\nEstimated Project Timeline\nDay(s)\nGo Daikin Mobile App + Tablet (Phase 4)\n170\nThe estimated time to complete development is around 11-12 months for one developer\nbut with 2 developers it is around 5-6 months. The actual time to complete development\ncan vary depending on the actual requirements, team count, and cooperation from\nDaikin Malaysia’s team.\nUpstack Studio Sdn. Bhd. - https://upstackstudio.com - contact@upstackstudio.com\n4"
+  },
+  {
+    "chunk_id": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4-p0005-c0001",
+    "source": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4",
+    "page": 5,
+    "text": "Team\nBelow is the team breakdown for your reference. The number of developers assigned is\nsubject to the availability of the team when the project kickstarts. The project timeline is\nestimated based on the team breakdown as shown below.\nDeveloper(s) Assigned\n2\nDesigner(s) Assigned\n2\nProject Cost\nThe project cost displayed in the table below includes 8% SST.\nScopes\nCost (MYR)\nMobile App Development\n270,000\nSST (8%)\n21,600\nTotal\n291,600\nPayment Terms\nAn advanced payment of 30% of the total project cost is required before the project\nstarts.\nThen, invoices will be sent to Daikin Malaysia Sdn. Bhd. according to the payment\ntimetable shown below, payable via bank transfer. Payment is due 30 days after the\ninvoice date (NET30).\nUpstack Studio will hold the ownership of source code and design assets throughout the\nproject. Ownership of source code and all other assets will be transferred progressively\nas the invoice for milestones A to B (as detailed in the tables below) is paid in full.\nOwnership of the source code for milestone C will only be transferred after the payment\nfor milestones C and D are received in full.\nLabels will be used to illustrate deliverables in the Payment Terms table. These\ndeliverables are estimated according to the project timeline and provided that Daikin\nUpstack Studio Sdn. Bhd. - https://upstackstudio.com - contact@upstackstudio.com\n5"
+  },
+  {
+    "chunk_id": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4-p0006-c0001",
+    "source": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4",
+    "page": 6,
+    "text": "Malaysia Sdn. Bhd. promptly provides all reasonable and necessary information to\nUpstack Studio.\nMilestone\nRequirements\nA\nDesign work as and when required\nAC loading priority during app start-up\nAutosave Wi-Fi network SSID and Password\nBluetooth control enabled while Wi-Fi disconnected\nE-Warranty certificate\nGeofencing function Improvement\nGo Share validity setting improvement\nB\nDesign work as and when required\nImprovement for complete profile page\nInconsistent a/c configuration in the timer feature\nManual Pairing\nNo back button in the Quick Timer setting\nPromotion UI\nScan wifi QR from the photo gallery\nSubscription expiry date display correction\nTroubleshooting Guide when Firmware Update Failure\nUser Feedback Channels\nWi-Fi scanning function - auto detect Wi-Fi network available\nWidget /Shortcut\nUpstack Studio Sdn. Bhd. - https://upstackstudio.com - contact@upstackstudio.com\n6"
+  },
+  {
+    "chunk_id": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4-p0007-c0001",
+    "source": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4",
+    "page": 7,
+    "text": "C\nDesign work as and when required\nGoogle Analytics update\nMass Wi-Fi Pairing Function & Mass Change Home Wi-Fi Feature\nDark mode\nWeekly Timer\nFavourite Setting Improvement\nD\nBug Fixes & Warranty (6 Months)\nPayment Milestones\nWhen Payable\nDeliverables\nPercentage\n(%)\nAmount\nPayable\nUpon Signing & Kickoff\n-\n30\nMYR 87,480\nCompletion of Milestone A\nA *\n20\nMYR 58,320\nCompletion of Milestone B\nB *\n20\nMYR 58,320\nCompletion of Milestone C\nC *\n20\nMYR 58,320\nUpon public release of the features,\npayment is to be made within six (6)\nmonths from the date of the issuance\nof the last invoice (C)\nD\n10\nMYR 29,160\nTotal\n100\nMYR 291,600\nThe cost to complete the project consists of all source code and design assets produced\nduring the whole design and development period. It does not include any third-party\nservices or licenses such as AWS or any other services/licenses used to build the app.\nThese costs will be borne by Daikin Malaysia Sdn. Bhd.\n* The arrangement of the milestones can be reprioritized accordingly during the project.\nUpstack Studio Sdn. Bhd. - https://upstackstudio.com - contact@upstackstudio.com\n7"
+  },
+  {
+    "chunk_id": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4-p0008-c0001",
+    "source": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4",
+    "page": 8,
+    "text": "Bank Details:\nAccount Name: Upstack Studio Sdn. Bhd.\nAccount Number: 8008593929\nBank Name: CIMB Bank\nValidity\nThis quotation is valid for 30 days from the date of this proposal.\nNext Step\nFeel free to reach out to us with any questions or concerns you may have. We are more\nthan happy to discuss it.\nIf you would like to move forward with the project, the next steps will include:\n-\nSchedule a meeting with Upstack Studio to further discuss costing and timeline\n-\nOnce confirmed, Daikin Malaysia Sdn. Bhd. can prepare the service agreement\nthat incorporates this proposal for signing.\n-\nOnce signed, an invoice for First Payment will be sent before we kick-start the\ndesign and development work.\n** Please note that projects are scheduled on a first come first serve basis. At any given\ntime we likely have multiple outstanding proposals, waiting for approval, so the timeline\noutlined in this estimate is subject to change, should we schedule other work before\nreceiving approval from you.\nUpstack Studio Sdn. Bhd. - https://upstackstudio.com - contact@upstackstudio.com\n8"
+  },
+  {
+    "chunk_id": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4-p0009-c0001",
+    "source": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4",
+    "page": 9,
+    "text": "Acceptance\n___________________________\nName:\nDate:\nDaikin Malaysia Sdn. Bhd.\nUpstack Studio Sdn. Bhd. - https://upstackstudio.com - contact@upstackstudio.com\n9"
+  },
+  {
+    "chunk_id": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4-p0010-c0001",
+    "source": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4",
+    "page": 10,
+    "text": "Appendix A\nProject Requirements\nModule\nRequirements\nDesign\nAllocation for any design changes/request, design\nreview, or UX review required\nScan wifi QR from photo gallery\nAs a User, I want to scan wifi QR from photo gallery\nImprovement for complete profile\npage\nAs a User, I want to view an improvement in the\nprofile page\nE-Warranty certificate\nAs a User, I want to display a list of expiration dates\nand check warranty t&c\nAs a User, I want to update warranty dropdown\nmenu and MD\nGeofencing function Improvement\nAs a User, I want to have automated detection from\ngeofencing and updating the status on the\nhomepage\nNo back button in Quick Timer\nsetting\nAs a User, I want to have a back button in the quick\ntimer setting\nWi-Fi scanning function - auto\ndetect Wi-Fi network available\nAs a User, I want to have an auto wi-fi network\ndetector\nAutosave Wi-Fi network SSID and\nPassword\nAs a User, I w\nant to autosave the Wi-Fi network so that I can\nreconnect the same wifi if disconnected\nTroubleshooting Guide when\nFirmware Update Failure\nAs a User, I want to update the copy to display\ntroubleshooting guide during the firmware update\nSubscription expiry date display\ncorrection\nAs a User, I want to double-check that the expiry\ndate follows the correct formula. It shouldn't be\nmore than 2 years\nInconsistent a/c configuration in\ntimer feature\nAs a User, I want to change fan speed from 5 to 3. It\nwas wrongly displayed\nGo Share validity setting\nimprovement\nAs a User, I want to change the flow of QR code\nvalidity\nPromotion UI\nAs a User, I want to revamp the banner image to fit\nUpstack Studio Sdn. Bhd. - https://upstackstudio.com - contact@upstackstudio.com\n10"
+  },
+  {
+    "chunk_id": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4-p0011-c0001",
+    "source": "Go Daikin Phase 4 Proposal (DMSS + DAMA) - 1.4",
+    "page": 11,
+    "text": "the banner size correctly.\nBluetooth control enabled while\nWi-Fi disconnected\nAs a User, I want to want to allow Bluetooth remote\ncontrol\nAC loading priority during app\nstart-up\nAs a User, I want to changethe loading priority to be\nfrom historical data instead of sequence\nMass Wi-Fi Pairing Function &\nMass Change Home Wi-Fi Feature As a User, I want to transfer pairing to homeowner\nUser Feedback Channels\nAs a User, I want to have a centralized user\nfeedback in-app\nWidget /Shortcut\nAs a User, I want to have quick access features on\nthe home screen for certain features\nUIUX improvement\nAs a User, I want to have an improved user interface\ndesign\nManual Pairing\nAs a User, I want to update user manual pairing\nwhen QR is unavailable\nWeekly Timer\nAs a User, I want to shorten the loading time\nAs a User, I want to have a timer batch deletion\nFavorite Setting Improvement\nAs a User, I want to apply my favorite setting while\nin eco mode\nAs a User, I want to deactivate sleep mode if my\nfavorite setting is activated\nDark mode\nAs a User, I want to have a dark-mode selection\nAs a Designer, I want to have a dark-mode selection\nUpstack Studio Sdn. Bhd. - https://upstackstudio.com - contact@upstackstudio.com\n11"
+  }
+]
