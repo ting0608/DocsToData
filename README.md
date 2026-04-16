@@ -60,6 +60,55 @@ Python-first RAG starter using OpenAI + FAISS, plus local Ollama + FAISS.
 
 Use `"provider": "openai"` to run the OpenAI pipeline instead.
 
+## Simple web UI
+
+- Start backend:
+  - `uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000`
+- Open:
+  - `http://localhost:8000/`
+
+UI behavior:
+- `+` button uploads PDF and calls `/ingest-upload`
+- Send button (or Enter) calls `/query`
+- Provider dropdown lets you switch between `ollama` and `openai`
+
+## Deploy to Google Cloud Run (OpenAI + API key)
+
+Ollama does not run inside this container by default. For cloud, use **OpenAI** (`provider: "openai"`) and store `OPENAI_API_KEY` in **Secret Manager**, then wire it as an environment variable on the service.
+
+1. Build and push an image (replace `PROJECT_ID` and region):
+   - `gcloud auth configure-docker`
+   - `docker build -t gcr.io/PROJECT_ID/docstodata:latest .`
+   - `docker push gcr.io/PROJECT_ID/docstodata:latest`
+2. Create a secret for the API key (one-time):
+   - `echo -n 'sk-...' | gcloud secrets create openai-api-key --data-file=-`
+3. Deploy to Cloud Run:
+   - `gcloud run deploy docstodata --image gcr.io/PROJECT_ID/docstodata:latest --region us-central1 --allow-unauthenticated --set-env-vars DISABLE_OLLAMA=true --set-secrets OPENAI_API_KEY=openai-api-key:latest`
+4. Open the service URL; use the UI with **OpenAI** selected, or call `/ingest` and `/query` with `"provider": "openai"`.
+
+**Ephemeral disk:** FAISS indexes and uploads live on the container filesystem. They are lost when the instance is replaced or scaled to zero. For production persistence, plan **Cloud Storage** (or a database) for `index.faiss` / `chunks.json` and uploads.
+
+### Optional persistent storage with GCS
+
+Set these env vars on Cloud Run:
+- `GCS_BUCKET=<your_bucket_name>`
+- `GCS_PREFIX=docstodata` (optional)
+
+Behavior:
+- `/ingest` and `/ingest-upload` upload `index.faiss` and `chunks.json` to `gs://<bucket>/<prefix>/indexes/<provider>/...`
+- uploaded PDFs are mirrored to `gs://<bucket>/<prefix>/uploads/...`
+- `/query` auto-downloads index files from GCS if local files are missing
+- check `/storage-status` to verify GCS config at runtime
+
+**Local Docker test:**
+
+```bash
+docker build -t docstodata:local .
+docker run --rm -p 8080:8080 -e DISABLE_OLLAMA=true -e OPENAI_API_KEY=sk-... docstodata:local
+```
+
+Then open `http://localhost:8080/`.
+
 ## Project structure
 
 - `rag/pdf_parser.py`: extracts page text from PDF via PyMuPDF

@@ -8,3 +8,5 @@ tiktoken>=0.7.0
 requests>=2.32.0
 fastapi>=0.115.0
 uvicorn>=0.30.0
+python-multipart>=0.0.9
+google-cloud-storage>=2.18.0
