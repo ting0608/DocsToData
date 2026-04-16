@@ -1,0 +1,56 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>DocsToData Chat</title>
+    <link rel="stylesheet" href="/frontend/styles.css" />
+  </head>
+  <body>
+    <main class="app">
+      <section class="chat-card">
+        <h1>DocsToData</h1>
+        <p class="subtitle">Upload a PDF with +, then ask your question.</p>
+
+        <div id="messages" class="messages"></div>
+
+        <div class="controls">
+          <select id="provider">
+            <option value="ollama" selected>Ollama (local)</option>
+            <option value="openai">OpenAI</option>
+          </select>
+        </div>
+
+        <div class="chat-input-row">
+          <button id="uploadBtn" class="icon-btn" title="Upload and ingest PDF">+</button>
+          <input id="questionInput" type="text" placeholder="Ask: What is this document about?" />
+          <button id="summarizeBtn" class="summarize-btn">Summarize</button>
+          <button id="sendBtn" class="send-btn">Send</button>
+        </div>
+
+        <input id="fileInput" type="file" accept=".pdf" hidden />
+      </section>
+    </main>
+
+    <div id="reportOverlay" class="overlay hidden">
+      <div class="report-modal">
+        <div class="report-header">
+          <h2>Summary Report</h2>
+          <button id="closeReportBtn" class="close-btn" title="Close">x</button>
+        </div>
+        <pre id="reportContent" class="report-content"></pre>
+        <div class="report-actions">
+          <select id="exportFormat" title="Choose report format">
+            <option value="txt" selected>.txt</option>
+            <option value="pdf">.pdf</option>
+            <option value="png">.png</option>
+          </select>
+          <button id="exportReportBtn" class="export-btn">Export Report</button>
+        </div>
+      </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="/frontend/app.js"></script>
+  </body>
+  </html>
