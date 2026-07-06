@@ -10,11 +10,14 @@
     <main class="app">
       <section class="chat-card">
         <h1>DocsToData</h1>
-        <p class="subtitle">Upload a PDF with +, then ask your question.</p>
+        <p class="subtitle">Upload PDFs with +, then ask, summarize, or compare documents.</p>
 
         <div id="messages" class="messages"></div>
 
         <div class="controls">
+          <button id="documentsBtn" class="documents-btn hidden" type="button" title="View indexed PDFs">
+            PDFs (0)
+          </button>
           <select id="provider">
             <option value="ollama" selected>Ollama (local)</option>
             <option value="openai">OpenAI</option>
@@ -28,9 +31,30 @@
           <button id="sendBtn" class="send-btn">Send</button>
         </div>
 
-        <input id="fileInput" type="file" accept=".pdf" hidden />
+        <input id="fileInput" type="file" accept=".pdf" multiple hidden />
       </section>
     </main>
+
+    <div id="documentsOverlay" class="overlay hidden">
+      <div class="documents-modal">
+        <div class="documents-header">
+          <h2>Indexed PDFs</h2>
+          <button id="closeDocumentsBtn" class="close-btn" title="Close">x</button>
+        </div>
+        <div class="documents-body">
+          <p class="documents-hint">Checked PDFs are used for Ask, Summarize, and Compare.</p>
+          <div class="documents-panel">
+            <ul id="documentsList" class="documents-list"></ul>
+          </div>
+        </div>
+        <div class="documents-footer">
+          <button id="selectAllDocumentsBtn" class="documents-action-btn" type="button">Select all</button>
+          <button id="clearDocumentsBtn" class="documents-action-btn documents-action-btn-muted" type="button">
+            Clear all
+          </button>
+        </div>
+      </div>
+    </div>
 
     <div id="reportOverlay" class="overlay hidden">
       <div class="report-modal">

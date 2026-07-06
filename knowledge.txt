@@ -1,0 +1,359 @@
+DocsToData — RAG System Knowledge
+==================================
+
+Last updated: 2026-07-06 (PDF scope selection + documents modal UI)
+
+This document explains how the DocsToData Retrieval-Augmented Generation (RAG)
+system works end to end: ingestion, indexing, intent routing, and answering.
+
+
+1. What This System Does
+------------------------
+
+DocsToData lets users upload one or more PDF documents, index them into a vector
+store, and ask questions against that corpus. Answers are grounded in retrieved
+document chunks rather than the model's general knowledge.
+
+The system supports two LLM providers:
+  - OpenAI (cloud)     → rag/pipeline.py       → index at data/index
+  - Ollama (local)     → rag_local/pipeline.py → index at data/index_local
+
+Both providers share the same core building blocks under rag/ (PDF parsing,
+chunking, FAISS vector store, LangGraph workflow).
+
+
+2. High-Level Architecture
+--------------------------
+
+  User (browser or CLI)
+        │
+        ▼
+  backend/app.py  (FastAPI)
+        │
+        ├── POST /ingest-upload  →  save PDFs → ingest pipeline
+        ├── GET  /documents      →  list indexed PDF names
+        └── POST /query          →  LangGraph workflow → answer
+        │
+        ▼
+  RagPipeline (OpenAI)  or  LocalRagPipeline (Ollama)
+        │
+        ├── ingest:  parse → chunk → embed → FAISS
+        └── query:   LangGraph → classify intent → retrieve → LLM answer
+        │
+        ▼
+  data/index/  or  data/index_local/
+    ├── index.faiss      (vector search index)
+    ├── chunks.json      (text + metadata per chunk)
+    └── embeddings.npy   (raw vectors, for safe re-indexing on doc removal)
+
+
+3. Ingestion Pipeline (PDF → Vector Index)
+------------------------------------------
+
+When a PDF is ingested, the following steps run in order:
+
+  Step 1 — Parse PDF
+    File: rag/pdf_parser.py
+    Tool: PyMuPDF (fitz)
+    Output: list of (page_number, page_text) tuples
+
+  Step 2 — Chunk pages
+    File: rag/chunking.py
+    Method: tiktoken sliding windows (default: 700 tokens, 120 overlap)
+    Each chunk gets metadata:
+      - chunk_id  e.g. "report-p0003-c0002"
+      - source    PDF filename without extension
+      - page      page number
+      - text      chunk content
+
+
+  Step 3 — Embed chunks
+    OpenAI:  text-embedding-3-small (default, 1536 dims) via OpenAI API
+    Ollama:  nomic-embed-text (default, 768 dims) via /api/embeddings
+
+  Step 4 — Store in FAISS
+    File: rag/vector_store.py
+    Index type: IndexFlatIP (inner product on L2-normalized vectors ≈ cosine)
+    Vectors and chunk metadata are saved to disk.
+
+Multi-PDF behavior:
+  - New PDFs are APPENDED to the existing index (not replaced).
+  - Re-uploading a PDF with the same filename replaces only that document's
+    chunks (old chunks for that source are removed, index is rebuilt).
+  - Multiple PDFs coexist in one shared index per provider.
+
+
+4. Vector Store Internals
+-------------------------
+
+Class: FaissStore (rag/vector_store.py)
+
+  add(embeddings, chunks)
+    Appends vectors to FAISS and extends the chunks list.
+
+  search(embedding, top_k, source_filter=None)
+    Returns top-k most similar chunks by inner product score.
+    Optional source_filter limits results to specific document names.
+
+  list_sources()
+    Returns unique document source names currently in the index.
+
+  remove_source(source)
+    Removes all chunks for one document and rebuilds the FAISS index
+    using stored embeddings (embeddings.npy).
+
+  save(out_dir) / load(in_dir, dim)
+  Persists index.faiss, chunks.json, and embeddings.npy.
+
+
+5. Query Pipeline (Question → Answer)
+-------------------------------------
+
+All queries go through a LangGraph workflow defined in rag/graph/.
+
+  Flow:
+    START
+      → classify (intent classifier)
+      → route by intent
+          → qa node        (standard question answering)
+          → summarize node (document summary)
+          → compare node   (cross-document comparison)
+      → END
+
+  Files:
+    rag/graph/state.py     — shared state (question, intent, source_filter, answer, sources)
+    rag/graph/intent.py    — LLM-based intent classification
+    rag/graph/nodes.py     — per-intent retrieval + generation logic
+    rag/graph/workflow.py  — StateGraph wiring and run_rag_graph()
+
+  Document scope (source_filter):
+    Queries can optionally limit retrieval to a subset of indexed PDFs.
+    When source_filter is set, only those document source names are searched.
+    When omitted or empty, all indexed documents for that provider are used.
+    The UI sends source_filter when the user has unchecked one or more PDFs
+    in the documents modal (see section 9).
+
+
+6. Intent Classification
+------------------------
+
+Three intents are supported:
+
+  qa
+    User asks a specific factual question.
+    Example: "What is the total budget?"
+    Behavior: retrieve top-k relevant chunks from selected document(s),
+    answer from context.
+
+  summarize
+    User wants an overview or structured summary.
+    Example: "Summarize these documents."
+    Behavior: retrieve chunks from each selected document, produce a summary.
+    With multiple PDFs indexed, narrowing selection avoids mixing unrelated docs.
+
+  compare
+    User wants to compare or contrast documents.
+    Example: "Compare the timelines across the two proposals."
+    Behavior: requires at least 2 selected PDFs; retrieves per-document context
+    and produces a side-by-side comparison.
+    If fewer than 2 documents are selected, returns a helpful error message.
+
+Classification:
+  - Runs automatically on every /query request via an LLM prompt.
+  - Can be overridden by passing "intent" in the request body
+    (values: "summarize", "qa", "compare").
+  - The Summarize button in the UI forces intent="summarize".
+
+
+7. Retrieval + Generation (per intent)
+--------------------------------------
+
+  Retrieval (all intents):
+    1. Resolve active documents via source_filter (if any) or all indexed sources.
+    2. Embed the user question into a vector (same model as ingest).
+    3. Search FAISS for nearest chunks (default top_k=5), scoped to active sources.
+    4. For summarize/compare: retrieve per-document chunks so every selected
+       PDF is represented in the context.
+
+  Per-intent helpers (rag/graph/nodes.py):
+    _selected_sources()     — applies source_filter against list_sources()
+    _retrieve_per_source()  — used by summarize/compare for balanced coverage
+
+  Generation:
+    Retrieved chunks are formatted as a context block:
+      [1] source=docA page=3 score=0.8234
+      <chunk text>
+
+    The LLM receives a system prompt + user prompt (question + context).
+    Temperature is 0.1 for consistent, grounded answers.
+
+  Response shape:
+    {
+      "answer":   "<generated text>",
+      "intent":   "qa" | "summarize" | "compare",
+      "sources":  ["docA", "docB"]   // documents cited in context
+    }
+
+
+8. API Endpoints
+----------------
+
+  GET  /
+    Serves the chat UI (frontend/index.html).
+
+  GET  /health
+    Health check.
+
+  GET  /documents?provider=openai|ollama
+    Lists indexed PDF source names and count.
+
+  POST /ingest
+    Ingest a PDF from a server-side path (CLI / programmatic use).
+    Body: { provider, pdf_path, chunk_size, chunk_overlap }
+
+  POST /ingest-upload
+    Upload one or more PDFs from the browser (multipart form).
+    Form fields: provider, files (repeatable), chunk_size, chunk_overlap
+    Saves to data/uploads/, then appends each PDF to the index.
+
+  POST /query
+    Ask a question against the indexed corpus.
+    Body: {
+      provider,
+      question,
+      top_k,
+      intent (optional),
+      source_filter (optional) — list of PDF source names to search;
+                                 omit to use all indexed documents
+    }
+
+
+9. Frontend (frontend/)
+-----------------------
+
+  app.js drives the chat UI:
+    - Provider dropdown (Ollama default / OpenAI) — each provider has its
+      own index (data/index_local vs data/index); document lists are separate.
+    - PDFs button: opens a modal listing indexed document names with checkboxes.
+      Label shows "PDFs (n)" when all are selected, or "PDFs (k/n)" for a subset.
+      Checked PDFs are used for Ask, Summarize, and Compare.
+      Select all / Clear all actions in the modal footer.
+      Selection is remembered per provider; newly uploaded PDFs are checked by default.
+    - + button: multi-PDF upload via /ingest-upload
+    - Send: free-form question (intent auto-detected); sends source_filter when
+      only a subset of PDFs is checked
+    - Summarize: forces intent=summarize, scopes to selected PDFs, shows exportable
+      report (.txt / .pdf / .png)
+
+  UI files:
+    frontend/index.html   — chat shell, documents modal, summary report modal
+    frontend/styles.css   — green theme, message bubbles, modal styling
+    frontend/app.js       — chat logic, document selection state, API calls
+
+  Important: OpenAI and Ollama maintain separate indexes. The PDFs button reflects
+  whichever provider is selected in the dropdown — not the other provider's index.
+
+
+10. CLI Usage
+-------------
+
+  OpenAI:
+    python -m rag.cli ingest --pdf path/to/doc.pdf
+    python -m rag.cli query  --question "What is this about?"
+
+  Ollama:
+    python -m rag_local.cli ingest --pdf path/to/doc.pdf
+    python -m rag_local.cli query  --question "What is this about?"
+
+
+11. Configuration (.env)
+------------------------
+
+  OpenAI:
+    OPENAI_API_KEY=sk-...
+    OPENAI_CHAT_MODEL=gpt-4o-mini        (default)
+    OPENAI_EMBED_MODEL=text-embedding-3-small  (default)
+    VECTOR_DIM=1536                      (default)
+
+  Ollama:
+    OLLAMA_BASE_URL=http://localhost:11434
+    OLLAMA_CHAT_MODEL=llama3.1:8b
+    OLLAMA_EMBED_MODEL=nomic-embed-text:latest
+    OLLAMA_VECTOR_DIM=768
+
+  Server:
+    DISABLE_OLLAMA=true    (disable Ollama on cloud deployments)
+
+  GCS persistence (optional):
+    GCS_BUCKET=my-bucket
+    GCS_PREFIX=docstodata
+    Indexes and uploads are mirrored to GCS when configured.
+
+
+12. Key Design Decisions
+------------------------
+
+  Why FAISS?
+    Fast in-memory vector search, no external DB required, easy to persist
+    to disk as index.faiss + chunks.json.
+
+  Why LangGraph?
+    Separates intent classification from execution. Each intent (qa, summarize,
+    compare) is an independent node, making the flow easy to extend without
+    tangling if/else logic in the API layer.
+
+  Why one shared index per provider?
+    Simpler cross-document Q&A and comparison. All PDFs share one FAISS index;
+    chunks are distinguished by the "source" metadata field.
+
+  Why optional source_filter?
+    With multiple unrelated PDFs in one index, summarize/QA can pull conflated
+    context. Letting the user check which PDFs to include keeps retrieval focused
+    without re-ingesting or maintaining separate indexes per document.
+
+  Why store embeddings.npy?
+    FAISS does not support deleting vectors by metadata. When a document is
+    removed or re-uploaded, embeddings.npy lets the system rebuild the index
+    from the remaining vectors without re-embedding everything.
+
+  Why tiktoken chunking?
+    Token-aware splitting respects model context limits and produces more
+    consistent chunk sizes than character-based splitting.
+
+
+13. Data Directory Layout (runtime)
+-----------------------------------
+
+  data/
+    uploads/          ← raw uploaded PDFs
+    index/            ← OpenAI FAISS index (index.faiss, chunks.json, embeddings.npy)
+    index_local/      ← Ollama FAISS index
+
+
+14. Running the Server
+----------------------
+
+  pip install -r requirements.txt
+  uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000
+
+  Open http://localhost:8000
+  Upload PDFs with +, then ask questions, summarize, or compare.
+
+
+15. File Map (quick reference)
+------------------------------
+
+  backend/app.py           FastAPI server, all HTTP endpoints
+  rag/pipeline.py          OpenAI RAG pipeline (ingest + answer)
+  rag_local/pipeline.py    Ollama RAG pipeline
+  rag/pdf_parser.py        PDF text extraction
+  rag/chunking.py          Token-based text chunking
+  rag/vector_store.py      FAISS wrapper + persistence
+  rag/models.py            Chunk and SearchHit dataclasses
+  rag/config.py            OpenAI settings from .env
+  rag/graph/workflow.py    LangGraph StateGraph
+  rag/graph/intent.py      Intent classifier
+  rag/graph/nodes.py       qa / summarize / compare handlers (+ source scoping)
+  frontend/app.js          Chat UI logic, PDF selection, API calls
+  frontend/index.html      Chat UI shell + modals
+  frontend/styles.css      Chat and modal styling

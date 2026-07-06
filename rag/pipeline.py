@@ -6,7 +6,8 @@ from openai import OpenAI
 
 from rag.chunking import chunk_pages
 from rag.config import Settings, load_settings
-from rag.models import Chunk, SearchHit
+from rag.graph.workflow import run_rag_graph
+from rag.models import SearchHit
 from rag.pdf_parser import extract_pdf_pages
 from rag.vector_store import FaissStore
 
@@ -55,12 +56,17 @@ class RagPipeline:
         中文: 作為在 FAISS 進行檢索的查詢向量。
         """
 
-# During this time, we call openai embedding model to embed the question into a vector so that we can search from index
         response = self.client.embeddings.create(
             model=self.settings.openai_embed_model,
             input=text,
         )
         return response.data[0].embedding
+
+    def _load_or_create_store(self, out_dir: str) -> FaissStore:
+        index_path = Path(out_dir) / "index.faiss"
+        if index_path.exists():
+            return FaissStore.load(in_dir=out_dir, dim=self.settings.vector_dim)
+        return FaissStore(dim=self.settings.vector_dim)
 
     def ingest_pdf(
         self,
@@ -68,11 +74,12 @@ class RagPipeline:
         out_dir: str = "data/index",
         chunk_size: int = 700,
         chunk_overlap: int = 120,
+        replace_existing: bool = True,
     ) -> dict[str, int]:
-        """End-to-end ingestion: parse -> chunk -> embed -> index save.
+        """End-to-end ingestion: parse -> chunk -> embed -> append to index.
 
-        English: Builds a fresh FAISS index in `out_dir`.
-        中文: 在 `out_dir` 建立新的 FAISS 索引資料。
+        English: Appends to an existing FAISS index; replaces same source when re-uploaded.
+        中文: 會附加到既有索引；若同名來源已存在則先移除再寫入。
         """
 
         pages = extract_pdf_pages(pdf_path)
@@ -85,83 +92,70 @@ class RagPipeline:
         )
         embeddings = self.embed_texts([c.text for c in chunks])
 
-        store = FaissStore(dim=self.settings.vector_dim)
+        store = self._load_or_create_store(out_dir)
+        removed = store.remove_source(source_name) if replace_existing else 0
         store.add(embeddings=embeddings, chunks=chunks)
         store.save(out_dir=out_dir)
 
         return {
+            "source": source_name,
             "pages": len(pages),
             "chunks": len(chunks),
             "vectors": len(embeddings),
+            "replaced_chunks": removed,
+            "total_documents": len(store.list_sources()),
         }
 
-    def retrieve(self, question: str, in_dir: str = "data/index", top_k: int = 5) -> list[SearchHit]:
-        """Retrieve top-k chunks relevant to a question.
+    def list_sources(self, in_dir: str = "data/index") -> list[str]:
+        store = FaissStore.load(in_dir=in_dir, dim=self.settings.vector_dim)
+        return store.list_sources()
 
-        English: Loads persisted FAISS index from disk each call.
-        中文: 每次呼叫都會從磁碟載入已保存的 FAISS 索引。
-        """
+    def retrieve(
+        self,
+        question: str,
+        in_dir: str = "data/index",
+        top_k: int = 5,
+        source_filter: set[str] | None = None,
+    ) -> list[SearchHit]:
+        """Retrieve top-k chunks relevant to a question."""
 
         store = FaissStore.load(in_dir=in_dir, dim=self.settings.vector_dim)
-
-        # This is the key to embed the question into a vector so that we can search the index, refer to "embed_query" function
         query_vec = self.embed_query(question)
-        return store.search(query_vec, top_k=top_k)
+        return store.search(query_vec, top_k=top_k, source_filter=source_filter)
 
-    def answer(self, question: str, in_dir: str = "data/index", top_k: int = 5) -> dict[str, object]:
-        """Generate final answer with retrieved context and citations.
-
-        English: Returns `answer` plus source metadata for traceability.
-        中文: 回傳 `answer` 及來源資訊，方便追溯引用。
-        """
-
-        hits = self.retrieve(question=question, in_dir=in_dir, top_k=top_k)
-        context = self._build_context(hits)
-
+    def chat(self, system_prompt: str, user_prompt: str) -> str:
         completion = self.client.chat.completions.create(
             model=self.settings.openai_chat_model,
             messages=[
-                {
-                    "role": "system",
-                    "content": (
-                        "You are a helpful RAG assistant. Answer only from the provided context. "
-                        "If context is insufficient, say you are not sure."
-                    ),
-                },
-                {
-                    "role": "user",
-                    "content": f"Question:\n{question}\n\nContext:\n{context}",
-                },
+                {"role": "system", "content": system_prompt},
+                {"role": "user", "content": user_prompt},
             ],
             temperature=0.1,
         )
-        answer_text = completion.choices[0].message.content or ""
+        return completion.choices[0].message.content or ""
 
-        # English: Temporarily hide source payload from CLI/API response.
-        # 中文: 先暫時隱藏回傳中的來源資訊（sources）。
-        #
-        # To enable it again, uncomment the block below and return it.
-        # 若要恢復來源資訊，取消註解以下區塊並回傳 sources。
-        #
-        # sources = [
-        #     {
-        #         "chunk_id": hit.chunk.chunk_id,
-        #         "source": hit.chunk.source,
-        #         "page": hit.chunk.page,
-        #         "score": hit.score,
-        #     }
-        #     for hit in hits
-        # ]
-        # return {"answer": answer_text, "sources": sources}
-        return {"answer": answer_text}
+    def answer(
+        self,
+        question: str,
+        in_dir: str = "data/index",
+        top_k: int = 5,
+        intent: str | None = None,
+        source_filter: list[str] | None = None,
+    ) -> dict[str, object]:
+        """Run LangGraph workflow with intent routing."""
+
+        return run_rag_graph(
+            backend=self,
+            question=question,
+            in_dir=in_dir,
+            top_k=top_k,
+            intent=intent,  # type: ignore[arg-type]
+            source_filter=source_filter,
+        )
 
     @staticmethod
     def _build_context(hits: list[SearchHit]) -> str:
-        """Format retrieval hits into a prompt context block.
-
-        English: Includes source/page/score for grounded answering.
-        中文: 會附上來源/頁碼/分數，幫助回答更可追蹤。
-        """
+        """Format retrieval hits into a prompt context block."""
 
         if not hits:
             return "(no relevant chunks found)"

@@ -4,6 +4,8 @@ import os
 from pathlib import Path
 import shutil
 
+from typing import Literal
+
 from fastapi import FastAPI, File, Form, HTTPException, UploadFile
 from google.cloud import storage
 from fastapi.responses import FileResponse
@@ -112,6 +114,8 @@ class QueryRequest(BaseModel):
     question: str
     in_dir: str | None = None
     top_k: int = 5
+    intent: Literal["summarize", "qa", "compare"] | None = None
+    source_filter: list[str] | None = None
 
 
 app = FastAPI(title="DocsToData API", version="0.1.0")
@@ -179,6 +183,28 @@ def ingest(req: IngestRequest) -> dict[str, object]:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
 
+@app.get("/documents")
+def list_documents(provider: str = "openai") -> dict[str, object]:
+    """List indexed document sources for the selected provider."""
+
+    if provider not in {"openai", "ollama"}:
+        raise HTTPException(status_code=400, detail="provider must be openai or ollama")
+    _require_ollama(provider)
+
+    index_dir = "data/index" if provider == "openai" else "data/index_local"
+    _ensure_index_from_gcs(index_dir=index_dir, provider=provider)
+
+    try:
+        if provider == "openai":
+            sources = RagPipeline().list_sources(in_dir=index_dir)
+        else:
+            sources = LocalRagPipeline().list_sources(in_dir=index_dir)
+    except FileNotFoundError:
+        sources = []
+
+    return {"status": "ok", "provider": provider, "documents": sources, "count": len(sources)}
+
+
 @app.post("/query")
 def query(req: QueryRequest) -> dict[str, object]:
     try:
@@ -191,6 +217,8 @@ def query(req: QueryRequest) -> dict[str, object]:
                 question=req.question,
                 in_dir=index_dir,
                 top_k=req.top_k,
+                intent=req.intent,
+                source_filter=req.source_filter,
             )
             return {"status": "ok", "provider": "openai", **result}
 
@@ -201,6 +229,8 @@ def query(req: QueryRequest) -> dict[str, object]:
             question=req.question,
             in_dir=index_dir,
             top_k=req.top_k,
+            intent=req.intent,
+            source_filter=req.source_filter,
         )
         return {"status": "ok", "provider": "ollama", **result}
     except FileNotFoundError:
@@ -218,15 +248,15 @@ def query(req: QueryRequest) -> dict[str, object]:
 @app.post("/ingest-upload")
 def ingest_upload(
     provider: str = Form("ollama"),
-    file: UploadFile = File(...),
+    files: list[UploadFile] = File(...),
     out_dir: str | None = Form(default=None),
     chunk_size: int = Form(default=700),
     chunk_overlap: int = Form(default=120),
 ) -> dict[str, object]:
-    """Upload a file via browser and ingest it directly.
+    """Upload one or more PDFs via browser and ingest them into the shared index.
 
-    English: Saves uploaded PDF under `data/uploads`, then runs ingest.
-    中文: 將上傳 PDF 存到 `data/uploads`，再執行 ingest 流程。
+    English: Saves uploads under `data/uploads`, then appends each PDF to the index.
+    中文: 將上傳 PDF 存到 `data/uploads`，並逐一附加到共用索引。
     """
 
     if provider not in {"openai", "ollama"}:
@@ -234,49 +264,48 @@ def ingest_upload(
 
     _require_ollama(provider)
 
-    if not file.filename:
-        raise HTTPException(status_code=400, detail="missing filename")
+    if not files:
+        raise HTTPException(status_code=400, detail="at least one PDF file is required")
 
-    safe_name = Path(file.filename).name
-    saved_path = UPLOAD_DIR / safe_name
+    index_dir = out_dir or ("data/index" if provider == "openai" else "data/index_local")
+    pipeline = RagPipeline() if provider == "openai" else LocalRagPipeline()
+
+    ingested: list[dict[str, object]] = []
+    saved_paths: list[str] = []
 
     try:
-        with saved_path.open("wb") as out:
-            shutil.copyfileobj(file.file, out)
-        _upload_to_gcs(str(saved_path), _blob_path("uploads", safe_name))
+        for file in files:
+            if not file.filename:
+                raise HTTPException(status_code=400, detail="missing filename")
 
-        if provider == "openai":
-            index_dir = out_dir or "data/index"
-            pipeline = RagPipeline()
+            safe_name = Path(file.filename).name
+            if not safe_name.lower().endswith(".pdf"):
+                raise HTTPException(status_code=400, detail=f"only PDF files are supported: {safe_name}")
+
+            saved_path = UPLOAD_DIR / safe_name
+            with saved_path.open("wb") as out:
+                shutil.copyfileobj(file.file, out)
+            _upload_to_gcs(str(saved_path), _blob_path("uploads", safe_name))
+            saved_paths.append(str(saved_path))
+
             stats = pipeline.ingest_pdf(
                 pdf_path=str(saved_path),
                 out_dir=index_dir,
                 chunk_size=chunk_size,
                 chunk_overlap=chunk_overlap,
             )
-            _sync_index_to_gcs(index_dir=index_dir, provider="openai")
-            return {
-                "status": "ok",
-                "provider": "openai",
-                "saved_path": str(saved_path),
-                "ingest": stats,
-            }
+            ingested.append(stats)
 
-        index_dir = out_dir or "data/index_local"
-        pipeline = LocalRagPipeline()
-        stats = pipeline.ingest_pdf(
-            pdf_path=str(saved_path),
-            out_dir=index_dir,
-            chunk_size=chunk_size,
-            chunk_overlap=chunk_overlap,
-        )
-        _sync_index_to_gcs(index_dir=index_dir, provider="ollama")
+        _sync_index_to_gcs(index_dir=index_dir, provider=provider)
         return {
             "status": "ok",
-            "provider": "ollama",
-            "saved_path": str(saved_path),
-            "ingest": stats,
+            "provider": provider,
+            "saved_paths": saved_paths,
+            "ingest": ingested,
+            "total_documents": ingested[-1].get("total_documents", len(ingested)) if ingested else 0,
         }
+    except HTTPException:
+        raise
     except Exception as exc:
         raise HTTPException(status_code=400, detail=str(exc)) from exc
 
