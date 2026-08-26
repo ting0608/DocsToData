@@ -96,8 +96,27 @@ function ensureDocumentsSelected(actionLabel) {
   return true;
 }
 
+// English: Resolved from this module's own URL rather than a hardcoded
+// "/frontend/..." path. Locally/Docker/Cloud Run, FastAPI mounts static
+// files at "/frontend" (so this file lives at ".../frontend/js/uploadRag.js"),
+// but on Amplify "frontend/" content is deployed as the site root itself
+// (see amplify.yml's build step), so this file instead lives at
+// ".../js/uploadRag.js". Deriving the assets path from import.meta.url
+// resolves correctly in both cases without depending on any build-time
+// string rewrite (the Amplify build's `sed` only touches index.html, not
+// JS files).
+// 中文: 改用這個模組自身的 URL 推算路徑，不再寫死 "/frontend/..."。在本機/
+// Docker/Cloud Run，FastAPI 把靜態檔案掛載在 "/frontend"（此檔案位於
+// ".../frontend/js/uploadRag.js"）；但在 Amplify 上，frontend/ 內容本身就是
+// 站點根目錄（見 amplify.yml 的建置步驟），此檔案位置會變成
+// ".../js/uploadRag.js"。用 import.meta.url 推算 assets 路徑，兩種情況都能
+// 正確解析，不需要依賴任何建置期的字串取代（Amplify 建置的 `sed` 只處理
+// index.html，不會處理 JS 檔案）。
+const ASSETS_BASE_URL = new URL("../assets/", import.meta.url);
+
 function getProviderAvatar(provider) {
-  return provider === "openai" ? "/frontend/assets/openAI-icon.png" : "/frontend/assets/ollama-icon.png";
+  const file = provider === "openai" ? "openAI-icon.png" : "ollama-icon.png";
+  return new URL(file, ASSETS_BASE_URL).pathname;
 }
 
 function trimMessagesIfNeeded() {

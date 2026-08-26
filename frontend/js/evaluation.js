@@ -35,7 +35,32 @@ const runResultEl = document.getElementById("evalRunResult");
 
 const historyListEl = document.getElementById("evalHistoryList");
 
+const viewToggleEl = document.getElementById("evalViewToggle");
+const scoreGridCardEl = document.getElementById("evalScoreGridCard");
+const scoreGridGraphEl = document.getElementById("evalScoreGridGraph");
+const chartCanvas = document.getElementById("evalScoreChart");
+const chartEmptyHintEl = document.getElementById("evalChartEmptyHint");
+
 let loaded = false;
+let evalView = "card"; // "card" | "graph"
+let scoreChart = null;
+let latestSummary = null;
+
+// Category colors, shared between the card-view left border accents and the
+// graph-view bar colors, so the legend above the grid means the same thing
+// in either view.
+const METRIC_META = [
+  { key: "avg_recall_at_k", label: "Recall@K", category: "retrieval", color: "#2fa084" },
+  { key: "avg_precision_at_k", label: "Precision@K", category: "retrieval", color: "#2fa084" },
+  { key: "avg_mrr", label: "MRR", category: "retrieval", color: "#2fa084", isRatio: true },
+  { key: "avg_faithfulness", label: "Faithfulness", category: "generation", color: "#4c8bd9" },
+  { key: "avg_relevance", label: "Relevance", category: "generation", color: "#4c8bd9" },
+  { key: "avg_groundedness", label: "Groundedness", category: "generation", color: "#4c8bd9" },
+  { key: "avg_correctness", label: "Correctness", category: "quality", color: "#d19a2f" },
+  { key: "avg_citation_accuracy", label: "Citation Acc.", category: "quality", color: "#d19a2f" },
+  { key: "avg_hallucination_rate", label: "Hallucination", category: "quality", color: "#d19a2f" },
+  { key: "pass_rate_pct", label: "Pass rate (human)", category: "quality", color: "#d19a2f", isPercentAlready: true },
+];
 
 function formatLatency(ms) {
   if (!ms) return "0 ms";
@@ -55,6 +80,8 @@ async function loadSummary() {
   try {
     const data = await api.get(`/evaluate/summary?provider=${encodeURIComponent(currentProvider())}`);
     const s = data.summary;
+    latestSummary = s;
+
     totalRunsEl.textContent = String(s.total_runs);
     passRateEl.textContent = s.pass_rate_pct === null ? "–" : `${s.pass_rate_pct}%`;
     avgLatencyEl.textContent = formatLatency(s.avg_latency_ms);
@@ -72,9 +99,99 @@ async function loadSummary() {
     correctnessEl.textContent = formatPct(s.avg_correctness);
     citationAccuracyEl.textContent = formatPct(s.avg_citation_accuracy);
     hallucinationEl.textContent = formatPct(s.avg_hallucination_rate);
+
+    // Only touch the chart while its container is actually visible — Chart.js
+    // measures the canvas at creation/update time, and a `display: none`
+    // ancestor (the card view being active) reports zero size, leaving the
+    // chart blank even after switching to graph view later.
+    if (evalView === "graph") renderScoreChart();
   } catch {
     /* summary is a nice-to-have; ignore failures silently */
   }
+}
+
+function metricValueAsRatio(meta, summary) {
+  const raw = summary[meta.key];
+  if (raw === null || raw === undefined) return null;
+  if (meta.isPercentAlready) return raw / 100;
+  return raw; // avg_mrr and the *_at_k / judge scores are already 0..1
+}
+
+function renderScoreChart() {
+  if (!chartCanvas || typeof window.Chart === "undefined") return;
+  if (!latestSummary) return;
+
+  const points = METRIC_META.map((meta) => ({
+    meta,
+    ratio: metricValueAsRatio(meta, latestSummary),
+  }));
+  const hasAnyData = points.some((p) => p.ratio !== null);
+  chartEmptyHintEl.classList.toggle("hidden", hasAnyData);
+  chartCanvas.classList.toggle("hidden", !hasAnyData);
+  if (!hasAnyData) {
+    if (scoreChart) {
+      scoreChart.destroy();
+      scoreChart = null;
+    }
+    return;
+  }
+
+  const labels = points.map((p) => p.meta.label);
+  const values = points.map((p) => (p.ratio === null ? 0 : Math.round(p.ratio * 100)));
+  const colors = points.map((p) => p.meta.color);
+
+  if (scoreChart) {
+    scoreChart.data.labels = labels;
+    scoreChart.data.datasets[0].data = values;
+    scoreChart.data.datasets[0].backgroundColor = colors;
+    scoreChart.update();
+    return;
+  }
+
+  scoreChart = new window.Chart(chartCanvas, {
+    type: "bar",
+    data: {
+      labels,
+      datasets: [
+        {
+          label: "Score (%)",
+          data: values,
+          backgroundColor: colors,
+          borderRadius: 6,
+          maxBarThickness: 36,
+        },
+      ],
+    },
+    options: {
+      responsive: true,
+      maintainAspectRatio: false,
+      plugins: {
+        legend: { display: false },
+        tooltip: {
+          callbacks: {
+            label: (ctx) => `${ctx.formattedValue}%`,
+          },
+        },
+      },
+      scales: {
+        y: {
+          beginAtZero: true,
+          max: 100,
+          ticks: { callback: (v) => `${v}%` },
+        },
+      },
+    },
+  });
+}
+
+function setEvalView(view) {
+  evalView = view;
+  for (const btn of viewToggleEl.querySelectorAll(".view-toggle-btn")) {
+    btn.classList.toggle("active", btn.dataset.evalView === view);
+  }
+  scoreGridCardEl.classList.toggle("hidden", view !== "card");
+  scoreGridGraphEl.classList.toggle("hidden", view !== "graph");
+  if (view === "graph") renderScoreChart();
 }
 
 function renderCases(cases) {
@@ -286,6 +403,12 @@ async function runEvaluation(question, testCase = null) {
 }
 
 export function initEvaluation() {
+  viewToggleEl.addEventListener("click", (e) => {
+    const btn = e.target.closest(".view-toggle-btn");
+    if (!btn) return;
+    setEvalView(btn.dataset.evalView);
+  });
+
   caseForm.addEventListener("submit", async (e) => {
     e.preventDefault();
     const question = caseQuestionInput.value.trim();

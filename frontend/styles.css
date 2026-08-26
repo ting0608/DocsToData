@@ -1108,10 +1108,144 @@ select:focus,
   color: var(--color-text-muted);
 }
 
-.eval-metric-quadrant {
-  display: grid;
-  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+/* Header row above the metric grid: category legend + card/graph toggle */
+.eval-metrics-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-bottom: 12px;
+}
+
+.eval-legend {
+  display: flex;
   gap: 16px;
+  flex-wrap: wrap;
+}
+
+.eval-legend-item {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 12px;
+  color: var(--color-text-muted);
+  font-weight: 500;
+}
+
+.eval-legend-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  display: inline-block;
+}
+
+.eval-legend-dot.retrieval {
+  background: #2fa084;
+}
+
+.eval-legend-dot.generation {
+  background: #4c8bd9;
+}
+
+.eval-legend-dot.quality {
+  background: #d19a2f;
+}
+
+.view-toggle {
+  display: inline-flex;
+  background: var(--color-surface-muted);
+  border: 1px solid var(--color-border);
+  border-radius: var(--radius-sm);
+  padding: 3px;
+  gap: 2px;
+}
+
+.view-toggle-btn {
+  border: none;
+  background: transparent;
+  color: var(--color-text-muted);
+  padding: 6px 14px;
+  font-size: 13px;
+  font-weight: 500;
+  border-radius: 6px;
+  cursor: pointer;
+  transition:
+    background var(--duration-base) var(--ease-standard),
+    color var(--duration-base) var(--ease-standard);
+}
+
+.view-toggle-btn:hover {
+  color: var(--color-primary-dark);
+}
+
+.view-toggle-btn.active {
+  background: var(--color-surface);
+  color: var(--color-primary-darker);
+  font-weight: 600;
+  box-shadow: var(--shadow-sm);
+}
+
+/* Card view: 5 columns so 10 score metrics fit in exactly 2 rows on
+   desktop; wraps down gracefully on narrow viewports. */
+.eval-score-grid {
+  display: grid;
+  grid-template-columns: repeat(5, minmax(0, 1fr));
+  gap: 10px;
+  margin-bottom: 20px;
+}
+
+.eval-score-grid .summary-card {
+  padding: 10px;
+  gap: 2px;
+  border-left: 3px solid transparent;
+}
+
+.eval-score-grid .summary-label {
+  font-size: 11px;
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+
+.eval-score-grid .summary-value {
+  font-size: 19px;
+}
+
+.eval-score-grid .metric-retrieval {
+  border-left-color: #2fa084;
+}
+
+.eval-score-grid .metric-generation {
+  border-left-color: #4c8bd9;
+}
+
+.eval-score-grid .metric-quality {
+  border-left-color: #d19a2f;
+}
+
+@media (max-width: 900px) {
+  .eval-score-grid {
+    grid-template-columns: repeat(3, minmax(0, 1fr));
+  }
+}
+
+@media (max-width: 560px) {
+  .eval-score-grid {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+}
+
+.eval-chart-card {
+  margin-bottom: 20px;
+  padding: 16px;
+}
+
+.eval-chart-card canvas {
+  max-height: 260px;
+}
+
+.system-metric-group {
   margin-bottom: 20px;
 }
 

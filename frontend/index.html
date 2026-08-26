@@ -75,84 +75,86 @@
             <p class="subtitle">Run saved test questions against the live pipeline, grade the answers, and track quality over time.</p>
           </div>
 
-          <div class="eval-metric-quadrant">
-            <div class="eval-metric-group">
-              <h3>Retrieval</h3>
-              <div class="card-grid summary-grid">
-                <div class="card summary-card">
-                  <span class="summary-label">Recall@K</span>
-                  <span class="summary-value" id="evalRecall">–</span>
-                </div>
-                <div class="card summary-card">
-                  <span class="summary-label">Precision@K</span>
-                  <span class="summary-value" id="evalPrecision">–</span>
-                </div>
-                <div class="card summary-card">
-                  <span class="summary-label">MRR</span>
-                  <span class="summary-value" id="evalMrr">–</span>
-                </div>
-              </div>
+          <div class="eval-metrics-header">
+            <div class="eval-legend" id="evalLegend">
+              <span class="eval-legend-item"><span class="eval-legend-dot retrieval"></span>Retrieval</span>
+              <span class="eval-legend-item"><span class="eval-legend-dot generation"></span>Generation</span>
+              <span class="eval-legend-item"><span class="eval-legend-dot quality"></span>Quality</span>
             </div>
-
-            <div class="eval-metric-group">
-              <h3>Generation</h3>
-              <div class="card-grid summary-grid">
-                <div class="card summary-card">
-                  <span class="summary-label">Faithfulness</span>
-                  <span class="summary-value" id="evalFaithfulness">–</span>
-                </div>
-                <div class="card summary-card">
-                  <span class="summary-label">Relevance</span>
-                  <span class="summary-value" id="evalRelevance">–</span>
-                </div>
-                <div class="card summary-card">
-                  <span class="summary-label">Groundedness</span>
-                  <span class="summary-value" id="evalGroundedness">–</span>
-                </div>
-              </div>
+            <div class="view-toggle" id="evalViewToggle" role="group" aria-label="Metric view">
+              <button type="button" class="view-toggle-btn active" data-eval-view="card">Card view</button>
+              <button type="button" class="view-toggle-btn" data-eval-view="graph">Graph view</button>
             </div>
+          </div>
 
-            <div class="eval-metric-group">
-              <h3>Quality</h3>
-              <div class="card-grid summary-grid">
-                <div class="card summary-card">
-                  <span class="summary-label">Correctness</span>
-                  <span class="summary-value" id="evalCorrectness">–</span>
-                </div>
-                <div class="card summary-card">
-                  <span class="summary-label">Citation Acc.</span>
-                  <span class="summary-value" id="evalCitationAccuracy">–</span>
-                </div>
-                <div class="card summary-card">
-                  <span class="summary-label">Hallucination</span>
-                  <span class="summary-value" id="evalHallucination">–</span>
-                </div>
-                <div class="card summary-card">
-                  <span class="summary-label">Pass rate (human)</span>
-                  <span class="summary-value" id="evalPassRate">–</span>
-                </div>
-              </div>
+          <!-- Card view: Retrieval + Generation + Quality score metrics, 5 per row so 10 items fit in 2 rows -->
+          <div class="eval-score-grid" id="evalScoreGridCard">
+            <div class="card summary-card metric-retrieval">
+              <span class="summary-label">Recall@K</span>
+              <span class="summary-value" id="evalRecall">–</span>
             </div>
+            <div class="card summary-card metric-retrieval">
+              <span class="summary-label">Precision@K</span>
+              <span class="summary-value" id="evalPrecision">–</span>
+            </div>
+            <div class="card summary-card metric-retrieval">
+              <span class="summary-label">MRR</span>
+              <span class="summary-value" id="evalMrr">–</span>
+            </div>
+            <div class="card summary-card metric-generation">
+              <span class="summary-label">Faithfulness</span>
+              <span class="summary-value" id="evalFaithfulness">–</span>
+            </div>
+            <div class="card summary-card metric-generation">
+              <span class="summary-label">Relevance</span>
+              <span class="summary-value" id="evalRelevance">–</span>
+            </div>
+            <div class="card summary-card metric-generation">
+              <span class="summary-label">Groundedness</span>
+              <span class="summary-value" id="evalGroundedness">–</span>
+            </div>
+            <div class="card summary-card metric-quality">
+              <span class="summary-label">Correctness</span>
+              <span class="summary-value" id="evalCorrectness">–</span>
+            </div>
+            <div class="card summary-card metric-quality">
+              <span class="summary-label">Citation Acc.</span>
+              <span class="summary-value" id="evalCitationAccuracy">–</span>
+            </div>
+            <div class="card summary-card metric-quality">
+              <span class="summary-label">Hallucination</span>
+              <span class="summary-value" id="evalHallucination">–</span>
+            </div>
+            <div class="card summary-card metric-quality">
+              <span class="summary-label">Pass rate (human)</span>
+              <span class="summary-value" id="evalPassRate">–</span>
+            </div>
+          </div>
 
-            <div class="eval-metric-group">
-              <h3>System</h3>
-              <div class="card-grid summary-grid">
-                <div class="card summary-card">
-                  <span class="summary-label">Total runs</span>
-                  <span class="summary-value" id="evalTotalRuns">0</span>
-                </div>
-                <div class="card summary-card">
-                  <span class="summary-label">Avg latency</span>
-                  <span class="summary-value" id="evalAvgLatency">0 ms</span>
-                </div>
-                <div class="card summary-card">
-                  <span class="summary-label">Avg cost / query</span>
-                  <span class="summary-value" id="evalAvgCost">–</span>
-                </div>
-                <div class="card summary-card">
-                  <span class="summary-label">Error rate</span>
-                  <span class="summary-value" id="evalErrorRate">–</span>
-                </div>
+          <!-- Graph view: same metrics as a grouped bar chart, colored by category legend above -->
+          <div class="card eval-chart-card hidden" id="evalScoreGridGraph">
+            <canvas id="evalScoreChart" height="220"></canvas>
+            <p class="card-hint" id="evalChartEmptyHint">No scored runs yet — run an evaluation with judge scoring or ground truth to populate this chart.</p>
+          </div>
+
+          <div class="eval-metric-group system-metric-group">
+            <h3>System</h3>
+            <div class="card-grid summary-grid">
+              <div class="card summary-card">
+                <span class="summary-label">Total runs</span>
+                <span class="summary-value" id="evalTotalRuns">0</span>
+              </div>
+              <div class="card summary-card">
+                <span class="summary-label">Avg latency</span>
+                <span class="summary-value" id="evalAvgLatency">0 ms</span>
+              </div>
+              <div class="card summary-card">
+                <span class="summary-label">Avg cost / query</span>
+                <span class="summary-value" id="evalAvgCost">–</span>
+              </div>
+              <div class="card summary-card">
+                <span class="summary-label">Error rate</span>
+                <span class="summary-value" id="evalErrorRate">–</span>
               </div>
             </div>
           </div>
@@ -297,6 +299,7 @@
     <div id="toastContainer" class="toast-container" aria-live="polite"></div>
 
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
+    <script src="https://cdn.jsdelivr.net/npm/chart.js@4.5.1/dist/chart.umd.min.js"></script>
     <script type="module" src="/frontend/js/main.js"></script>
   </body>
 </html>
