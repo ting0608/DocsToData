@@ -1,0 +1,26 @@
+services:
+  go-invoice:
+    build: .
+    image: go-invoice:local
+    container_name: go-invoice-local
+    ports:
+      - "8080:8080"
+    env_file:
+      - .env
+    environment:
+      # Ollama runs on the host machine, not inside the container. On macOS/
+      # Windows, host.docker.internal resolves to the host. On Linux, add
+      # `extra_hosts` below (already included) so the same URL works there too.
+      DISABLE_OLLAMA: "false"
+      OLLAMA_BASE_URL: "http://host.docker.internal:11434"
+    extra_hosts:
+      # Makes host.docker.internal resolve on Linux too (already native on
+      # Docker Desktop for macOS/Windows, but this keeps it portable).
+      - "host.docker.internal:host-gateway"
+    volumes:
+      # Bind-mounts the real data/ directory so uploads and FAISS indexes
+      # created via the container are visible on the host filesystem (and
+      # vice versa — e.g. PDFs you drop into data/uploads/ or ingest via a
+      # local venv script). Without this, the container has its own private
+      # copy of data/ and nothing persists or syncs across runs.
+      - ./data:/app/data

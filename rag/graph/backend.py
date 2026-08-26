@@ -14,6 +14,7 @@ class RagBackend(Protocol):
         in_dir: str,
         top_k: int = 5,
         source_filter: set[str] | None = None,
+        **kwargs: object,
     ) -> list[SearchHit]: ...
 
     def chat(self, system_prompt: str, user_prompt: str) -> str: ...

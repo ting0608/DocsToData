@@ -12,3 +12,5 @@ python-multipart>=0.0.9
 google-cloud-storage>=2.18.0
 langgraph>=0.2.0
 langchain-core>=0.3.0
+PyJWT[crypto]>=2.9.0
+rank-bm25>=0.2.2

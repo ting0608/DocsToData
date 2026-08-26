@@ -13,7 +13,7 @@ def build_parser() -> argparse.ArgumentParser:
     中文: 支援 `ingest` 與 `query` 兩種子命令。
     """
 
-    parser = argparse.ArgumentParser(description="DocsToData RAG CLI")
+    parser = argparse.ArgumentParser(description="Go Invoice RAG CLI")
     sub = parser.add_subparsers(dest="command", required=True)
 
     ingest = sub.add_parser("ingest", help="Parse PDF and build FAISS index")
@@ -21,6 +21,12 @@ def build_parser() -> argparse.ArgumentParser:
     ingest.add_argument("--out-dir", default="data/index", help="Output directory for FAISS files")
     ingest.add_argument("--chunk-size", type=int, default=700, help="Chunk size in tokens")
     ingest.add_argument("--chunk-overlap", type=int, default=120, help="Chunk overlap in tokens")
+    ingest.add_argument(
+        "--chunk-strategy",
+        default=None,
+        choices=["page", "fixed_token", "semantic", "parent_child"],
+        help="Chunking strategy (default: CHUNK_STRATEGY env var, or 'page')",
+    )
 
     query = sub.add_parser("query", help="Ask question from existing FAISS index")
     query.add_argument("--question", required=True, help="Question text")
@@ -48,6 +54,7 @@ def main() -> None:
             out_dir=args.out_dir,
             chunk_size=args.chunk_size,
             chunk_overlap=args.chunk_overlap,
+            chunking_strategy=args.chunk_strategy,
         )
         print(json.dumps({"status": "ok", "ingest": stats}, ensure_ascii=False, indent=2))
         return

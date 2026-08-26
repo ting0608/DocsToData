@@ -12,6 +12,7 @@ RUN pip install --no-cache-dir -r requirements.txt
 COPY backend ./backend
 COPY rag ./rag
 COPY rag_local ./rag_local
+COPY rag_aws ./rag_aws
 COPY frontend ./frontend
 
 EXPOSE 8080

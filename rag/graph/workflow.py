@@ -65,4 +65,6 @@ def run_rag_graph(
         "answer": final.get("answer", ""),
         "intent": final.get("intent", "qa"),
         "sources": final.get("sources", []),
+        "citations": final.get("citations", []),
+        "confidence": final.get("confidence", 0.0),
     }

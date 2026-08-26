@@ -1,0 +1,82 @@
+DocsToData — Quickstart (Docker)
+=================================
+
+Everything (backend + web UI) runs from ONE container. FastAPI serves both
+the API and the frontend, so there's nothing separate to boot for the UI.
+
+
+Check if it's already running
+------------------------------
+docker ps --filter name=docstodata-local
+
+If it shows up with STATUS "Up ...", you're done. Just open:
+http://localhost:8080/
+
+If it exists but is stopped, restart it (keeps any ingested data):
+docker start docstodata-local
+
+
+First-time boot / fresh start
+------------------------------
+1. Start Docker Desktop (check menu bar icon is running).
+
+2. Make sure Ollama is running locally with the models pulled:
+   ollama list
+   (should show at least nomic-embed-text:latest and llama3.1:8b)
+
+3. Build the image (only needed the first time, or after code changes):
+   docker build -t docstodata:local .
+
+4. Run the container with Ollama enabled, pointed at your Mac host:
+   docker run --name docstodata-local -p 8080:8080 \
+     -e DISABLE_OLLAMA=false \
+     -e OLLAMA_BASE_URL=http://host.docker.internal:11434 \
+     --env-file .env \
+     docstodata:local
+
+5. Open the UI:
+   http://localhost:8080/
+
+
+Stopping / cleaning up
+-----------------------
+docker stop docstodata-local      # stop, keeps container + ingested data
+docker start docstodata-local     # resume where you left off
+docker rm -f docstodata-local     # remove entirely (loses ingested data,
+                                  # no volume is mounted yet)
+
+
+"Container name already in use" error
+---------------------------------------
+This means a container from a previous run is still around. Either:
+- Reuse it: docker start docstodata-local
+- Or remove it first, then run again:
+  docker stop docstodata-local
+  docker rm docstodata-local
+
+
+Useful URLs once running
+--------------------------
+Web UI:        http://localhost:8080/
+Health check:  http://localhost:8080/health
+Swagger docs:  http://localhost:8080/docs
+Storage check: http://localhost:8080/storage-status
+
+
+Notes
+-----
+- Provider dropdown in the UI: "ollama" uses your local Ollama models,
+  "openai" uses OPENAI_API_KEY from .env.
+- OLLAMA_BASE_URL must be host.docker.internal (not localhost) so the
+  container can reach Ollama running on your Mac.
+- No auth is on this server. Fine for localhost only — don't expose
+  port 8080 to your network as-is.
+- No volume is mounted, so uploaded PDFs and FAISS indexes live only
+  inside the container and are lost if you `docker rm` it.
+
+
+Non-Docker alternative (local venv)
+-------------------------------------
+source .venv/bin/activate
+uvicorn backend.app:app --reload --host 0.0.0.0 --port 8000
+Then open http://localhost:8000/

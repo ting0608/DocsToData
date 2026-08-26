@@ -1,0 +1,703 @@
+# DocsToData v2 — Production RAG Architecture
+
+## 1. Architecture Overview
+
+```text
+                         ┌──────────────────────┐
+                         │      React Web       │
+                         │    User Interface    │
+                         └──────────┬───────────┘
+                                    │
+                              HTTPS / REST
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │     API Gateway      │
+                         │   Authentication     │
+                         │    Rate Limiting     │
+                         └──────────┬───────────┘
+                                    │
+                                    ▼
+                         ┌──────────────────────┐
+                         │    FastAPI Backend   │
+                         │                      │
+                         │  Document Service    │
+                         │  Query Service       │
+                         │  Evaluation Service  │
+                         └───────┬───────┬──────┘
+                                 │       │
+                    ┌────────────┘       └──────────────┐
+                    │                                   │
+                    ▼                                   ▼
+          ┌──────────────────┐                ┌──────────────────┐
+          │  Document Store  │                │   Query Pipeline │
+          │                  │                │                  │
+          │       S3         │                │ Query Processing │
+          │                  │                │       ↓          │
+          │  Original PDFs   │                │ Hybrid Retrieval │
+          └────────┬─────────┘                │       ↓          │
+                   │                          │    Reranker      │
+                   │                          │       ↓          │
+                   ▼                          │  Top-K Context   │
+          ┌──────────────────┐                └────────┬─────────┘
+          │ Document Parser  │                         │
+          │                  │                         │
+          │ PDF → Text       │                         │
+          │ Metadata         │                         │
+          │ Page boundaries  │                         │
+          └────────┬─────────┘                         │
+                   │                                   │
+                   ▼                                   │
+          ┌──────────────────┐                          │
+          │ Chunking Engine  │                          │
+          │                  │                          │
+          │ Page-aware       │                          │
+          │ Token-based      │                          │
+          │ Overlap          │                          │
+          └────────┬─────────┘                          │
+                   │                                   │
+                   ▼                                   │
+          ┌──────────────────┐                          │
+          │ Embedding Engine │                          │
+          │                  │                          │
+          │ Local: Ollama    │                          │
+          │ Cloud: Bedrock   │                          │
+          └────────┬─────────┘                          │
+                   │                                   │
+                   ▼                                   │
+          ┌──────────────────┐                          │
+          │    Vector DB     │◄─────────────────────────┘
+          │                  │
+          │ FAISS / Managed  │
+          │ Vector Store     │
+          └──────────────────┘
+                                                      
+                         Retrieved Context
+                                │
+                                ▼
+                     ┌──────────────────────┐
+                     │    LLM Gateway       │
+                     │                      │
+                     │ Local → Ollama       │
+                     │ Cloud → Bedrock      │
+                     └──────────┬───────────┘
+                                │
+                                ▼
+                     ┌──────────────────────┐
+                     │ Structured Response  │
+                     │                      │
+                     │ Answer               │
+                     │ Citations            │
+                     │ Confidence / Sources │
+                     └──────────┬───────────┘
+                                │
+                                ▼
+                         React Web UI
+```
+
+---
+
+# 2. Document Ingestion Pipeline
+
+Users upload PDF documents through the React application.
+
+```text
+User
+ ↓
+React
+ ↓
+FastAPI
+ ↓
+S3
+ ↓
+Document Parser
+ ↓
+Chunking
+ ↓
+Embedding
+ ↓
+Vector Store
+```
+
+Each document should retain metadata such as:
+
+```text
+document_id
+filename
+page_number
+chunk_id
+created_at
+content_hash
+embedding_model
+chunk_size
+```
+
+The metadata allows the system to provide source citations and makes it possible to compare different retrieval strategies later.
+
+---
+
+# 3. Chunking Strategy
+
+The initial implementation should retain the existing page-aware strategy.
+
+```text
+PDF
+ ↓
+Page
+ ↓
+Text normalization
+ ↓
+Token-based chunking
+ ↓
+Overlap
+```
+
+Example:
+
+```text
+chunk_size = 700 tokens
+overlap    = 120 tokens
+```
+
+However, the new architecture should make chunking configurable.
+
+Example:
+
+```text
+Chunking Strategy
+├── Fixed Token
+├── Page Scoped
+├── Semantic
+└── Parent-Child
+```
+
+This allows the evaluation framework to compare different strategies rather than assuming that one configuration is optimal.
+
+---
+
+# 4. Retrieval Pipeline
+
+The query pipeline should be separated into independent stages.
+
+```text
+User Query
+    ↓
+Query Preprocessing
+    ↓
+┌─────────────────────┐
+│ Retrieval           │
+│                     │
+│ Vector Search       │
+│ +                   │
+│ Keyword Search      │
+└──────────┬──────────┘
+           ↓
+      Candidate Set
+           ↓
+       Reranking
+           ↓
+        Top-K
+           ↓
+      Context Builder
+           ↓
+          LLM
+```
+
+## Retrieval stages
+
+### Stage 1 — Candidate Retrieval
+
+Retrieve a larger candidate set:
+
+```text
+Top-K = 20
+```
+
+using:
+
+```text
+Vector similarity
++
+Keyword matching
+```
+
+### Stage 2 — Reranking
+
+The candidate documents are reranked according to their relevance to the query.
+
+```text
+20 candidates
+      ↓
+   Reranker
+      ↓
+Top 5 documents
+```
+
+### Stage 3 — Context Construction
+
+Only the most relevant chunks are passed to the LLM.
+
+This reduces:
+
+* token usage
+* latency
+* irrelevant context
+* hallucination risk
+
+---
+
+# 5. LLM Gateway
+
+The application should not directly depend on a single LLM provider.
+
+```text
+                   LLM Gateway
+                       │
+             ┌─────────┴─────────┐
+             ↓                   ↓
+         Local Mode           AWS Mode
+             │                   │
+          Ollama              Bedrock
+```
+
+The backend exposes a common interface:
+
+```text
+generate(
+    prompt,
+    model,
+    temperature,
+    max_tokens
+)
+```
+
+This allows different models to be evaluated without changing the application architecture.
+
+Example:
+
+```text
+Development
+→ Ollama
+
+Production Demo
+→ Amazon Bedrock
+```
+
+---
+
+# 6. Response Format
+
+The LLM should return structured output rather than plain text.
+
+Example:
+
+```json
+{
+  "answer": "...",
+  "sources": [
+    {
+      "document": "employee_handbook.pdf",
+      "page": 14,
+      "chunk_id": "chunk_042"
+    }
+  ],
+  "confidence": 0.91
+}
+```
+
+The frontend can then display:
+
+```text
+Answer
+
+According to the company policy...
+
+Sources:
+📄 employee_handbook.pdf
+   Page 14
+```
+
+This also makes evaluation easier.
+
+---
+
+# 7. Evaluation Framework
+
+This is one of the most important additions in v2.
+
+Create an evaluation dataset:
+
+```text
+evaluation/
+├── questions.json
+├── ground_truth.json
+└── expected_context.json
+```
+
+Example:
+
+```json
+{
+  "question": "How many days of annual leave are provided?",
+  "ground_truth": "14 days",
+  "expected_pages": [12]
+}
+```
+
+The system should evaluate both retrieval and generation.
+
+## Retrieval Metrics
+
+```text
+Recall@K
+Precision@K
+MRR
+Hit Rate
+NDCG
+```
+
+## Generation Metrics
+
+```text
+Faithfulness
+Answer Relevance
+Correctness
+Citation Accuracy
+Hallucination Rate
+```
+
+## System Metrics
+
+```text
+Latency
+Token Usage
+Cost per Query
+Failure Rate
+```
+
+---
+
+# 8. Experiment Framework
+
+The evaluation system should make different configurations comparable.
+
+Example:
+
+```text
+Experiment A
+Chunk Size: 700
+Overlap: 120
+Embedding: Model A
+Reranker: None
+
+Experiment B
+Chunk Size: 500
+Overlap: 100
+Embedding: Model A
+Reranker: Model B
+```
+
+Results:
+
+```text
+                 Experiment A    Experiment B
+------------------------------------------------
+Recall@5              72%             89%
+MRR                    0.61            0.82
+Faithfulness           84%             94%
+Answer Relevance       81%             91%
+Latency                1.8s            2.2s
+Cost / Query           $0.01           $0.015
+```
+
+The goal is not simply to maximize accuracy.
+
+The system should demonstrate the trade-off between:
+
+```text
+Accuracy
+Latency
+Cost
+```
+
+---
+
+# 9. AWS Deployment
+
+The first production deployment should remain intentionally simple.
+
+```text
+                         Internet
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │   CloudFront    │
+                    └────────┬────────┘
+                             │
+                             ▼
+                         React App
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │  API Gateway    │
+                    └────────┬────────┘
+                             │
+                             ▼
+                    ┌─────────────────┐
+                    │ Lambda / Fargate│
+                    │                 │
+                    │    FastAPI      │
+                    └───────┬─────────┘
+                            │
+              ┌─────────────┼─────────────┐
+              ↓             ↓             ↓
+             S3          Bedrock      Vector Store
+              │
+              ↓
+       Original Documents
+```
+
+For the initial deployment:
+
+```text
+Frontend → S3 / CloudFront
+Backend  → Lambda or small Fargate
+Documents → S3
+LLM → Bedrock
+```
+
+Avoid introducing OpenSearch, RDS, Kubernetes or other expensive infrastructure unless there is a clear engineering reason.
+
+---
+
+# 10. Local Development Mode
+
+The system should also support a completely local configuration.
+
+```text
+React
+ ↓
+FastAPI
+ ↓
+Ollama
+ ↓
+FAISS
+```
+
+This allows development and experimentation without cloud costs.
+
+Configuration:
+
+```text
+AI_MODE=local
+LLM_PROVIDER=ollama
+VECTOR_STORE=faiss
+```
+
+Production:
+
+```text
+AI_MODE=aws
+LLM_PROVIDER=bedrock
+VECTOR_STORE=...
+```
+
+---
+
+# 11. Observability
+
+Every request should produce structured logs.
+
+Example:
+
+```text
+request_id
+user_id
+query
+retrieval_latency
+reranking_latency
+llm_latency
+total_latency
+retrieved_chunks
+model
+input_tokens
+output_tokens
+estimated_cost
+```
+
+This allows a simple monitoring dashboard:
+
+```text
+Requests
+├── Success Rate
+├── Average Latency
+├── P95 Latency
+├── Token Usage
+└── Estimated Cost
+```
+
+CloudWatch can be used for the AWS deployment.
+
+---
+
+# 12. Testing
+
+The backend should include:
+
+```text
+tests/
+├── unit/
+│   ├── test_chunking.py
+│   ├── test_retrieval.py
+│   └── test_prompt.py
+│
+├── integration/
+│   └── test_rag_pipeline.py
+│
+└── evaluation/
+    └── test_rag_quality.py
+```
+
+The goal is to demonstrate that AI systems are tested like software systems rather than manually tested through the UI.
+
+---
+
+# 13. CI/CD
+
+The GitHub repository should use a basic pipeline:
+
+```text
+Developer
+    ↓
+Git Push
+    ↓
+GitHub Actions
+    ↓
+┌───────────────┐
+│ Lint          │
+│ Unit Tests    │
+│ Integration   │
+└───────┬───────┘
+        ↓
+ Docker Build
+        ↓
+ Deploy
+        ↓
+ AWS
+```
+
+---
+
+# 14. Cost-Control Strategy
+
+The project should explicitly demonstrate cost awareness.
+
+## Local
+
+```text
+Ollama
++
+FAISS
+=
+RM0 cloud cost
+```
+
+## Production
+
+Use:
+
+```text
+Lambda
++
+S3
++
+API Gateway
++
+Bedrock
+```
+
+for low-volume workloads.
+
+Use budget alerts and monitor:
+
+```text
+LLM tokens
+API requests
+S3 storage
+Compute usage
+```
+
+The system should aim to remain within approximately:
+
+```text
+RM20–50/month
+```
+
+for a low-traffic portfolio deployment.
+
+---
+
+# 15. Final Engineering Goals
+
+The project should demonstrate five major capabilities:
+
+### 1. AI
+
+```text
+LLM
+RAG
+Embeddings
+Reranking
+Prompting
+```
+
+### 2. Software Engineering
+
+```text
+Python
+FastAPI
+Testing
+Clean architecture
+Structured output
+Error handling
+```
+
+### 3. Cloud
+
+```text
+AWS
+S3
+API Gateway
+Lambda/Fargate
+Bedrock
+CloudWatch
+IAM
+```
+
+### 4. AI Evaluation
+
+```text
+Retrieval evaluation
+Generation evaluation
+Experiment tracking
+Latency
+Cost
+```
+
+### 5. Production Engineering
+
+```text
+Docker
+CI/CD
+Logging
+Monitoring
+Configuration management
+```
+
+The final project should therefore be positioned not as:
+
+> "A chatbot that talks to PDFs."
+
+but as:
+
+> **"A production-oriented RAG platform that evaluates retrieval and generation quality, supports local and cloud LLMs, and provides measurable accuracy, latency and cost trade-offs."**

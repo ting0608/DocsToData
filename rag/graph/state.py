@@ -15,3 +15,5 @@ class RagState(TypedDict, total=False):
     source_filter: list[str] | None
     answer: str
     sources: list[str]
+    citations: list[dict[str, object]]
+    confidence: float

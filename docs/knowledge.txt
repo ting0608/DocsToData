@@ -50,12 +50,31 @@ chunking, FAISS vector store, LangGraph workflow).
 3. Ingestion Pipeline (PDF → Vector Index)
 ------------------------------------------
 
+PDF ← Step 1
+ │
+ ▼
+Chunk ← Step 2
+ │
+ ▼
+Embedding ← Step 3
+ │
+ ▼
+Vector DB ← Step 4
+ │
+ ▼
+Similarity Search 
+ │
+ ▼
+LLM
+
 When a PDF is ingested, the following steps run in order:
 
   Step 1 — Parse PDF
     File: rag/pdf_parser.py
     Tool: PyMuPDF (fitz)
     Output: list of (page_number, page_text) tuples
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
   Step 2 — Chunk pages
     File: rag/chunking.py
@@ -66,10 +85,39 @@ When a PDF is ingested, the following steps run in order:
       - page      page number
       - text      chunk content
 
+We are doing something cool here: Page Scoped, Token Aware, Sliding Window and ChunkID.
+
+- Page Scoped: Our chunk will never crossover the pages, which could helps to store our page number as reference.
+The cons was that theres chance we cant get the complete info, since we cut it per page (this is the tradeoff and smtg we could improve).
+
+- Token Aware: We used tokens as our unit here, 700 tokens per chunk.
+
+- Sliding Window: This is the part to ensure our completement of our context, added overlap of 120 tokens
+For example: Chunk 1 (0-700), Chunk 2 (580-1280), Chunk 3 (1280-1860)...
+This ensures that our context wont break, rather than 17% of overlap (120/700 tokens), 10%, 15% and 20% are optional as well.
+
+- ChunkID: Added ChunkID with combination of source, page and chunk; helps user to narrowdown source without db lookup.
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
 
   Step 3 — Embed chunks
     OpenAI:  text-embedding-3-small (default, 1536 dims) via OpenAI API
     Ollama:  nomic-embed-text (default, 768 dims) via /api/embeddings
+
+This part embed chunks into vectors, using either OpenAI or Ollama. This is to ensure that VectorDB ltr on can do similarity search accoring to the verctors.
+
+What is dims (Dimensions)?
+We take a 2-dims example:
+Sweetness and Sourness 
+Apple (8,2), Lemon (1,9), Grapes (7,3)
+Dims help computer to understand the item, and let computer do the prediction base on following vectors coming in. 
+Later when you put in either 2 dims vector (8,2) item, computer could quickly guess you could be looking for an apple.
+The higher the dims, the better output, the slower searching time and the higher cost.
+
+One thing to take note was that, Index and Query has to be with the same Embedding Model, this is due to the different size of dims might bring different vector mapping, different distance to compare and lead inaccurate results.
+
+------------------------------------------------------------------------------------------------------------------------------------------------------------------
+
 
   Step 4 — Store in FAISS
     File: rag/vector_store.py
@@ -104,6 +152,15 @@ Class: FaissStore (rag/vector_store.py)
 
   save(out_dir) / load(in_dir, dim)
   Persists index.faiss, chunks.json, and embeddings.npy.
+
+
+The vector store (FAISS Store) could be split into 2 parts:
+
+- FAISS Index (index.faiss)
+This file contains embeddings (all of the vectors), which we convert it earlier using Step 3. This is hard for human to understand.
+
+- Chunk Metadata (chunks.json)
+This file contains metadatas such as ChunkID, Source, Page no and context(700 tokens).
 
 
 5. Query Pipeline (Question → Answer)

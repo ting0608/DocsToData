@@ -1,3 +1,13 @@
+// Upload & RAG view: chat-style ask/summarize/compare over uploaded PDFs.
+// Behavior preserved from the original single-page app.js, refactored into a
+// module that shares provider state and the api/toast helpers with the rest
+// of the app.
+
+import { api, ApiError } from "./api.js";
+import { getAccessToken } from "./auth.js";
+import { currentProvider, onProviderChange } from "./state.js";
+import { showToast } from "./toast.js";
+
 const messagesEl = document.getElementById("messages");
 const providerEl = document.getElementById("provider");
 const uploadBtn = document.getElementById("uploadBtn");
@@ -23,10 +33,6 @@ const allDocuments = [];
 const selectedSources = new Set();
 const knownDocumentsByProvider = { openai: [], ollama: [] };
 const selectedSourcesByProvider = { openai: new Set(), ollama: new Set() };
-
-function currentProvider() {
-  return providerEl.value;
-}
 
 function getKnownDocuments() {
   return knownDocumentsByProvider[currentProvider()] || [];
@@ -224,13 +230,8 @@ function setAllDocumentSelection(checked) {
   updateDocumentsBtnLabel();
 }
 
-async function refreshDocuments() {
-  const res = await fetch(`/documents?provider=${encodeURIComponent(providerEl.value)}`);
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.detail || "Failed to load documents");
-  }
-
+export async function refreshDocuments() {
+  const data = await api.get(`/documents?provider=${encodeURIComponent(providerEl.value)}`);
   const docs = data.documents || [];
   const provider = currentProvider();
   const prevKnown = knownDocumentsByProvider[provider] || [];
@@ -279,24 +280,28 @@ async function ingestFiles(fileList) {
 
   addMessage("system", `Uploading and ingesting ${files.length} PDF(s)...`);
 
+  // Multipart uploads must not set Content-Type manually (the browser sets
+  // the multipart boundary), so only the Authorization header is attached.
+  const token = getAccessToken();
   const res = await fetch("/ingest-upload", {
     method: "POST",
     body: form,
+    headers: token ? { Authorization: `Bearer ${token}` } : {},
   });
-  const data = await res.json();
-
+  const json = await res.json();
   if (!res.ok) {
-    throw new Error(data.detail || "Ingest failed");
+    throw new Error(json.detail || "Ingest failed");
   }
 
-  const ingested = Array.isArray(data.ingest) ? data.ingest : [data.ingest];
+  const ingested = Array.isArray(json.ingest) ? json.ingest : [json.ingest];
   for (const item of ingested) {
     addMessage(
       "system",
       `Ingested ${item.source}: pages ${item.pages}, chunks ${item.chunks}, vectors ${item.vectors}`
     );
   }
-  addMessage("system", `Total indexed documents: ${data.total_documents ?? ingested.length}`);
+  addMessage("system", `Total indexed documents: ${json.total_documents ?? ingested.length}`);
+  showToast(`Ingested ${files.length} PDF(s)`, "success");
   await refreshDocuments();
 }
 
@@ -313,16 +318,7 @@ async function fetchAnswer(question, intent = null) {
     payload.source_filter = sourceFilter;
   }
 
-  const res = await fetch("/query", {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify(payload),
-  });
-  const data = await res.json();
-  if (!res.ok) {
-    throw new Error(data.detail || "Query failed");
-  }
-  return data;
+  return api.post("/query", payload);
 }
 
 async function askQuestion(question) {
@@ -346,7 +342,7 @@ function buildReportText(summaryText, intent) {
       : "Focused on: all indexed PDFs";
 
   const lines = [
-    "DocsToData Summary Report",
+    "Go Invoice Summary Report",
     `Generated at: ${new Date().toLocaleString()}`,
     `Provider: ${providerEl.value}`,
     `Intent: ${intent || "summarize"}`,
@@ -464,81 +460,87 @@ async function runSummarizeReport() {
   }
 }
 
-uploadBtn.addEventListener("click", () => fileInput.click());
+export function initUploadRag() {
+  uploadBtn.addEventListener("click", () => fileInput.click());
 
-fileInput.addEventListener("change", async () => {
-  const files = fileInput.files;
-  if (!files?.length) return;
-  try {
-    await ingestFiles(files);
-  } catch (err) {
-    addMessage("system", `Error: ${err.message}`);
-  } finally {
-    fileInput.value = "";
-  }
-});
+  fileInput.addEventListener("change", async () => {
+    const files = fileInput.files;
+    if (!files?.length) return;
+    try {
+      await ingestFiles(files);
+    } catch (err) {
+      addMessage("system", `Error: ${err.message}`);
+      showToast(err.message, "error");
+    } finally {
+      fileInput.value = "";
+    }
+  });
 
-sendBtn.addEventListener("click", async () => {
-  const question = questionInput.value.trim();
-  if (!question) return;
-  if (!ensureDocumentsSelected("ask a question")) return;
-  questionInput.value = "";
-  try {
-    await askQuestion(question);
-  } catch (err) {
-    addMessage("system", `Error: ${err.message}`);
-  }
-});
+  sendBtn.addEventListener("click", async () => {
+    const question = questionInput.value.trim();
+    if (!question) return;
+    if (!ensureDocumentsSelected("ask a question")) return;
+    questionInput.value = "";
+    try {
+      await askQuestion(question);
+    } catch (err) {
+      addMessage("system", `Error: ${err.message}`);
+    }
+  });
 
-questionInput.addEventListener("keydown", async (e) => {
-  if (e.key !== "Enter") return;
-  e.preventDefault();
-  sendBtn.click();
-});
+  questionInput.addEventListener("keydown", async (e) => {
+    if (e.key !== "Enter") return;
+    e.preventDefault();
+    sendBtn.click();
+  });
 
-summarizeBtn.addEventListener("click", async () => {
-  try {
-    await runSummarizeReport();
-  } catch (err) {
-    addMessage("system", `Error: ${err.message}`);
-  }
-});
+  summarizeBtn.addEventListener("click", async () => {
+    try {
+      await runSummarizeReport();
+    } catch (err) {
+      addMessage("system", `Error: ${err.message}`);
+      showToast(err.message, "error");
+    }
+  });
 
-providerEl.addEventListener("change", async () => {
-  try {
-    await refreshDocuments();
-  } catch (err) {
-    addMessage("system", `Error loading documents: ${err.message}`);
-  }
-});
+  onProviderChange(async () => {
+    try {
+      await refreshDocuments();
+    } catch (err) {
+      addMessage("system", `Error loading documents: ${err.message}`);
+    }
+  });
 
-documentsBtn.addEventListener("click", showDocumentsModal);
-closeDocumentsBtn.addEventListener("click", hideDocumentsModal);
-selectAllDocumentsBtn.addEventListener("click", () => setAllDocumentSelection(true));
-clearDocumentsBtn.addEventListener("click", () => setAllDocumentSelection(false));
-documentsOverlay.addEventListener("click", (e) => {
-  if (e.target === documentsOverlay) hideDocumentsModal();
-});
+  documentsBtn.addEventListener("click", showDocumentsModal);
+  closeDocumentsBtn.addEventListener("click", hideDocumentsModal);
+  selectAllDocumentsBtn.addEventListener("click", () => setAllDocumentSelection(true));
+  clearDocumentsBtn.addEventListener("click", () => setAllDocumentSelection(false));
+  documentsOverlay.addEventListener("click", (e) => {
+    if (e.target === documentsOverlay) hideDocumentsModal();
+  });
 
-closeReportBtn.addEventListener("click", hideReport);
+  closeReportBtn.addEventListener("click", hideReport);
 
-reportOverlay.addEventListener("click", (e) => {
-  if (e.target === reportOverlay) hideReport();
-});
+  reportOverlay.addEventListener("click", (e) => {
+    if (e.target === reportOverlay) hideReport();
+  });
 
-exportReportBtn.addEventListener("click", () => {
-  if (!latestReportText) return;
-  const format = exportFormatEl.value || "txt";
-  if (format === "png") {
-    downloadPngFromText(latestReportText);
-    return;
-  }
-  if (format === "pdf") {
-    downloadPdfFromText(latestReportText);
-    return;
-  }
-  downloadBlob(latestReportText, "text/plain;charset=utf-8", "txt");
-});
+  exportReportBtn.addEventListener("click", () => {
+    if (!latestReportText) return;
+    const format = exportFormatEl.value || "txt";
+    if (format === "png") {
+      downloadPngFromText(latestReportText);
+      return;
+    }
+    if (format === "pdf") {
+      downloadPdfFromText(latestReportText);
+      return;
+    }
+    downloadBlob(latestReportText, "text/plain;charset=utf-8", "txt");
+  });
 
-addMessage("system", "Ready. Pick provider, upload PDFs with +, then ask, summarize, or compare.");
-refreshDocuments().catch(() => {});
+  addMessage("system", "Ready. Pick provider, upload PDFs with +, then ask, summarize, or compare.");
+  refreshDocuments().catch((err) => {
+    if (err instanceof ApiError && err.status === 401) return; // handled by auth guard
+  });
+}

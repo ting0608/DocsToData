@@ -1,0 +1,157 @@
+Go Invoice - Change Log
+UI Revamp + Navigation + AWS Cognito Authentication
+========================================================================
+
+Summary
+-------
+Rebuilt the frontend from a single flat chat page into a navigation-based
+SPA with 4 sections, added animations across all components, and wired up
+AWS Cognito authentication end to end (frontend PKCE flow + backend JWT
+verification). Added two new features that didn't exist before: a
+Document Library and an Evaluation Dashboard.
+
+Nav sections
+------------
+1. Upload & RAG      - existing chat/upload/summarize/export flow, moved
+                        into its own view. Behavior unchanged.
+2. Evaluation Dashboard - new. Save test questions, run them against the
+                        live pipeline, grade answers pass/fail, track
+                        pass rate and average latency over time.
+3. Document Library  - new. Browse indexed PDFs per provider with page
+                        and chunk counts, delete a document from the
+                        index. Replaces the old cramped "PDFs" modal as
+                        the primary way to manage documents.
+4. Account           - new. Sign in / sign out via AWS Cognito Hosted UI.
+                        Runs in an open "dev mode" (no login required)
+                        until Cognito is configured.
+
+Frontend changes
+-----------------
+- frontend/index.html
+  - Replaced single chat-only markup with a top nav bar (brand, 4 nav
+    links, animated active indicator, provider selector, user badge)
+    and 4 view sections (rag, evaluation, library, auth).
+  - Kept the existing PDFs modal and Summary Report modal, now shared
+    across views.
+  - Added a toast container for notifications.
+  - Swapped the single <script src="app.js"> for
+    <script type="module" src="/frontend/js/main.js">.
+
+- frontend/app.js
+  - Deleted. Logic split into ES modules under frontend/js/.
+
+- frontend/js/ (new directory, ES modules, no build step)
+  - main.js       - app bootstrap, wires nav + auth + the 3 feature views
+  - nav.js        - view switching, animated sliding nav indicator
+  - state.js      - shared "current provider" state across views
+  - api.js        - fetch wrapper that attaches the Cognito bearer token
+                     and normalizes API errors
+  - auth.js       - Cognito Hosted UI login via Authorization Code +
+                     PKCE (no client secret in the browser), token
+                     storage in sessionStorage, sign-out redirect
+  - authView.js   - wires the Account page and topbar user badge to
+                     auth.js, handles dev-mode display
+  - toast.js      - small animated toast notifications
+  - uploadRag.js  - the original chat/upload/summarize/export logic,
+                     refactored into a module (functionality preserved)
+  - library.js    - Document Library view: list, stats, delete
+  - evaluation.js - Evaluation Dashboard view: test cases, run, grade,
+                     summary metrics
+
+- frontend/styles.css
+  - Rewritten as a token-based design system (CSS custom properties for
+    color, spacing, radius, shadow, easing/duration).
+  - Added keyframe animations: rise-in, scale-in, slide-down, fade-in,
+    typing-pulse, pop-in, shimmer, spin.
+  - Every interactive component now animates: nav underline slides
+    between links, views fade/rise in on switch, cards rise in with
+    stagger, buttons lift on hover, modals scale in, toasts slide in/out,
+    skeleton loaders shimmer while data loads, rating badges pop in.
+  - Respects prefers-reduced-motion (animations shortened to ~0 for users
+    who request reduced motion).
+  - Added styles for the new nav, Document Library cards, Evaluation
+    Dashboard (summary cards, case list, history list, rating badges),
+    and Account view.
+
+Backend changes
+----------------
+- backend/auth.py (new)
+  - Verifies AWS Cognito access tokens (RS256, via JWKS) using PyJWT.
+  - Checks issuer, token_use=access, and client_id match.
+  - Falls back to an open "dev mode" identity when COGNITO_REGION /
+    COGNITO_USER_POOL_ID / COGNITO_CLIENT_ID are not all set, so local
+    development still works without an AWS account.
+  - Exposes auth_public_config() with the non-secret settings the
+    frontend needs to build the Hosted UI URL (region, pool id, client
+    id, domain, optional SSO provider name).
+
+- backend/eval_store.py (new)
+  - JSON-file persistence for the Evaluation Dashboard (no DB in this
+    project yet, kept consistent with how the FAISS index is stored).
+  - data/eval_cases.json   - saved test questions
+  - data/eval_history.json - run history (answer, sources, latency,
+                              rating, notes)
+  - Includes summary() for aggregate pass rate / average latency.
+
+- backend/app.py
+  - Added CORS middleware (CORS_ALLOW_ORIGINS env var, default "*") to
+    support the Cognito Hosted UI redirect flow.
+  - Added GET /auth/config  - public Cognito settings for the frontend
+  - Added GET /auth/me      - resolves identity from the bearer token
+  - Protected all existing routes with a get_current_user dependency:
+    /ingest, /documents, /query, /ingest-upload
+  - Added GET /documents/details               - per-document page/chunk
+                                                   counts (Document
+                                                   Library)
+  - Added DELETE /documents/{provider}/{source} - remove a document and
+                                                   its vectors from the
+                                                   index
+  - Added evaluation routes:
+    GET/POST   /evaluate/cases
+    DELETE     /evaluate/cases/{case_id}
+    POST       /evaluate/run
+    GET        /evaluate/history
+    POST       /evaluate/history/{run_id}/rate
+    GET        /evaluate/summary
+
+Config / docs changes
+-----------------------
+- requirements.txt   - added PyJWT[crypto]>=2.9.0
+- .env.example       - added COGNITO_REGION, COGNITO_USER_POOL_ID,
+                        COGNITO_CLIENT_ID, COGNITO_DOMAIN,
+                        COGNITO_SSO_PROVIDER, CORS_ALLOW_ORIGINS
+- docs/README.md     - added "AWS Cognito authentication setup" section
+                        with step-by-step User Pool / Hosted UI setup,
+                        documented the new nav sections and endpoints,
+                        clarified that Cloud Run's --allow-unauthenticated
+                        flag is independent of app-level Cognito auth
+
+Behavior change to flag
+-------------------------
+Once Cognito env vars are configured, every API route requires a valid
+bearer token. Today the app (and its Cloud Run deployment) is fully
+open. This is intentional per the request but changes current behavior
+once you set the Cognito variables - dev mode keeps everything open
+until then.
+
+Verification performed
+------------------------
+- Backend imports cleanly, 23+ routes registered.
+- Smoke-tested all endpoints via curl: /health, /auth/config, /auth/me,
+  /documents, /documents/details, DELETE /documents/{provider}/{source},
+  /evaluate/cases (create/list/delete), /evaluate/run, /evaluate/history,
+  /evaluate/history/{id}/rate, /evaluate/summary.
+- Headless browser check (Playwright + Chromium): all 4 nav views
+  switch correctly with zero console/page errors.
+- Document Library confirmed showing a real previously-ingested PDF with
+  correct page/chunk counts.
+- Evaluation Dashboard confirmed running a real question against the
+  live OpenAI pipeline, persisting the run, and updating pass rate to
+  100% after marking it "pass".
+- Test data and processes cleaned up after verification.
+
+Not done / needs your action
+------------------------------
+- Actual AWS Cognito User Pool creation requires your AWS account and
+  console access - I wired the integration but did not (and cannot)
+  provision AWS resources. See docs/README.md for setup steps.

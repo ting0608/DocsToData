@@ -3,35 +3,186 @@
   <head>
     <meta charset="UTF-8" />
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-    <title>DocsToData Chat</title>
+    <title>Go Invoice</title>
+    <link rel="icon" type="image/png" href="/frontend/assets/logo.png" />
     <link rel="stylesheet" href="/frontend/styles.css" />
   </head>
   <body>
-    <main class="app">
-      <section class="chat-card">
-        <h1>DocsToData</h1>
-        <p class="subtitle">Upload PDFs with +, then ask, summarize, or compare documents.</p>
+    <header class="topbar">
+      <div class="brand">
+        <img class="brand-mark" src="/frontend/assets/logo.png" alt="Go Invoice logo" />
+        <span class="brand-name">Go Invoice</span>
+      </div>
 
-        <div id="messages" class="messages"></div>
+      <nav class="nav" id="mainNav" aria-label="Main navigation">
+        <button class="nav-link" data-view="rag" type="button">Upload &amp; RAG</button>
+        <button class="nav-link" data-view="evaluation" type="button">Evaluation Dashboard</button>
+        <button class="nav-link" data-view="library" type="button">Document Library</button>
+        <button class="nav-link" data-view="auth" type="button">Account</button>
+        <span class="nav-indicator" id="navIndicator" aria-hidden="true"></span>
+      </nav>
 
-        <div class="controls">
-          <button id="documentsBtn" class="documents-btn hidden" type="button" title="View indexed PDFs">
-            PDFs (0)
-          </button>
-          <select id="provider">
-            <option value="ollama" selected>Ollama (local)</option>
-            <option value="openai">OpenAI</option>
-          </select>
+      <div class="topbar-actions">
+        <select id="provider" title="Choose model provider">
+          <option value="ollama" selected>Ollama (local)</option>
+          <option value="openai">OpenAI</option>
+        </select>
+        <div id="userBadge" class="user-badge hidden">
+          <span class="user-avatar" id="userAvatar">U</span>
+          <span class="user-name" id="userName">User</span>
+          <button id="topbarSignOutBtn" class="btn btn-ghost btn-sm" type="button">Sign out</button>
         </div>
+        <button id="topbarSignInBtn" class="btn btn-primary btn-sm hidden" type="button">Sign in</button>
+      </div>
+    </header>
 
-        <div class="chat-input-row">
-          <button id="uploadBtn" class="icon-btn" title="Upload and ingest PDF">+</button>
-          <input id="questionInput" type="text" placeholder="Ask: What is this document about?" />
-          <button id="summarizeBtn" class="summarize-btn">Summarize</button>
-          <button id="sendBtn" class="send-btn">Send</button>
+    <main class="views" id="views">
+      <!-- Upload & RAG -->
+      <section class="view" id="view-rag" data-view="rag">
+        <div class="view-inner">
+          <div class="chat-card card">
+            <div class="view-header">
+              <h1>Upload &amp; RAG</h1>
+              <p class="subtitle">Upload PDFs with +, then ask, summarize, or compare documents.</p>
+            </div>
+
+            <div id="messages" class="messages"></div>
+
+            <div class="controls">
+              <button id="documentsBtn" class="documents-btn hidden" type="button" title="View indexed PDFs">
+                PDFs (0)
+              </button>
+              <span class="controls-hint">Selected provider applies across the whole app.</span>
+            </div>
+
+            <div class="chat-input-row">
+              <button id="uploadBtn" class="icon-btn" type="button" title="Upload and ingest PDF">+</button>
+              <input id="questionInput" type="text" placeholder="Ask: What is this document about?" />
+              <button id="summarizeBtn" class="summarize-btn" type="button">Summarize</button>
+              <button id="sendBtn" class="send-btn" type="button">Send</button>
+            </div>
+
+            <input id="fileInput" type="file" accept=".pdf" multiple hidden />
+          </div>
         </div>
+      </section>
 
-        <input id="fileInput" type="file" accept=".pdf" multiple hidden />
+      <!-- Evaluation Dashboard -->
+      <section class="view" id="view-evaluation" data-view="evaluation">
+        <div class="view-inner">
+          <div class="view-header">
+            <h1>Evaluation Dashboard</h1>
+            <p class="subtitle">Run saved test questions against the live pipeline, grade the answers, and track quality over time.</p>
+          </div>
+
+          <div class="card-grid summary-grid" id="evalSummaryGrid">
+            <div class="card summary-card">
+              <span class="summary-label">Total runs</span>
+              <span class="summary-value" id="evalTotalRuns">0</span>
+            </div>
+            <div class="card summary-card">
+              <span class="summary-label">Pass rate</span>
+              <span class="summary-value" id="evalPassRate">–</span>
+            </div>
+            <div class="card summary-card">
+              <span class="summary-label">Graded / Ungraded</span>
+              <span class="summary-value" id="evalGraded">0 / 0</span>
+            </div>
+            <div class="card summary-card">
+              <span class="summary-label">Avg latency</span>
+              <span class="summary-value" id="evalAvgLatency">0 ms</span>
+            </div>
+          </div>
+
+          <div class="two-col">
+            <div class="card">
+              <h2>Test cases</h2>
+              <p class="card-hint">Save a question you want to keep re-testing across runs.</p>
+              <form id="evalCaseForm" class="stacked-form">
+                <input id="evalCaseQuestion" type="text" placeholder="Question, e.g. What is the total budget?" required />
+                <textarea id="evalCaseExpected" placeholder="Expected answer (optional)" rows="2"></textarea>
+                <button type="submit" class="btn btn-primary">Save test case</button>
+              </form>
+              <ul id="evalCaseList" class="eval-case-list"></ul>
+            </div>
+
+            <div class="card">
+              <h2>Run a question</h2>
+              <p class="card-hint">Runs against the currently selected provider and indexed documents.</p>
+              <form id="evalRunForm" class="stacked-form">
+                <input id="evalRunQuestion" type="text" placeholder="Type a question to evaluate" required />
+                <button type="submit" class="btn btn-primary" id="evalRunBtn">Run evaluation</button>
+              </form>
+              <div id="evalRunResult" class="eval-run-result hidden"></div>
+            </div>
+          </div>
+
+          <div class="card">
+            <h2>Run history</h2>
+            <p class="card-hint">Grade each answer pass / fail to build up quality metrics.</p>
+            <div id="evalHistoryList" class="eval-history-list"></div>
+          </div>
+        </div>
+      </section>
+
+      <!-- Document Library -->
+      <section class="view" id="view-library" data-view="library">
+        <div class="view-inner">
+          <div class="view-header">
+            <h1>Document Library</h1>
+            <p class="subtitle">Everything indexed for the selected provider, with page and chunk counts.</p>
+          </div>
+
+          <div class="library-toolbar">
+            <span class="library-count" id="libraryCount">0 documents</span>
+            <button id="libraryUploadBtn" class="btn btn-primary" type="button">+ Upload PDFs</button>
+          </div>
+
+          <div id="libraryEmpty" class="empty-state hidden">
+            <p>No documents indexed yet for this provider.</p>
+            <button id="libraryEmptyUploadBtn" class="btn btn-primary" type="button">Upload your first PDF</button>
+          </div>
+
+          <div class="card-grid" id="libraryGrid"></div>
+        </div>
+      </section>
+
+      <!-- Account / Authentication -->
+      <section class="view" id="view-auth" data-view="auth">
+        <div class="view-inner view-inner-narrow">
+          <div class="view-header">
+            <h1>Account</h1>
+            <p class="subtitle">Sign in with AWS Cognito to access Go Invoice.</p>
+          </div>
+
+          <div class="card auth-card" id="authDevModePanel">
+            <h2>Dev mode</h2>
+            <p>Authentication is not configured on this server, so every request runs as a local dev user.</p>
+            <p class="card-hint">Set <code>COGNITO_REGION</code>, <code>COGNITO_USER_POOL_ID</code>, and <code>COGNITO_CLIENT_ID</code> to enable Cognito login.</p>
+          </div>
+
+          <div class="card auth-card hidden" id="authLoggedOutPanel">
+            <h2>Sign in</h2>
+            <p>Continue with email &amp; password, or your organization's SSO, via the AWS Cognito hosted sign-in page.</p>
+            <div class="auth-actions">
+              <button id="signInEmailBtn" class="btn btn-primary btn-lg" type="button">Sign in with email</button>
+              <button id="signInSsoBtn" class="btn btn-secondary btn-lg hidden" type="button">Continue with SSO</button>
+            </div>
+          </div>
+
+          <div class="card auth-card hidden" id="authLoggedInPanel">
+            <h2>Signed in</h2>
+            <div class="auth-profile">
+              <span class="user-avatar user-avatar-lg" id="authUserAvatar">U</span>
+              <div>
+                <p class="auth-profile-name" id="authUserName">User</p>
+                <p class="auth-profile-email" id="authUserEmail"></p>
+                <p class="auth-profile-sub" id="authUserSub"></p>
+              </div>
+            </div>
+            <button id="signOutBtn" class="btn btn-ghost" type="button">Sign out</button>
+          </div>
+        </div>
       </section>
     </main>
 
@@ -39,7 +190,7 @@
       <div class="documents-modal">
         <div class="documents-header">
           <h2>Indexed PDFs</h2>
-          <button id="closeDocumentsBtn" class="close-btn" title="Close">x</button>
+          <button id="closeDocumentsBtn" class="close-btn" title="Close" type="button">x</button>
         </div>
         <div class="documents-body">
           <p class="documents-hint">Checked PDFs are used for Ask, Summarize, and Compare.</p>
@@ -60,7 +211,7 @@
       <div class="report-modal">
         <div class="report-header">
           <h2>Summary Report</h2>
-          <button id="closeReportBtn" class="close-btn" title="Close">x</button>
+          <button id="closeReportBtn" class="close-btn" title="Close" type="button">x</button>
         </div>
         <pre id="reportContent" class="report-content"></pre>
         <div class="report-actions">
@@ -69,12 +220,14 @@
             <option value="pdf">.pdf</option>
             <option value="png">.png</option>
           </select>
-          <button id="exportReportBtn" class="export-btn">Export Report</button>
+          <button id="exportReportBtn" class="export-btn" type="button">Export Report</button>
         </div>
       </div>
     </div>
 
+    <div id="toastContainer" class="toast-container" aria-live="polite"></div>
+
     <script src="https://cdn.jsdelivr.net/npm/jspdf@2.5.1/dist/jspdf.umd.min.js"></script>
-    <script src="/frontend/app.js"></script>
+    <script type="module" src="/frontend/js/main.js"></script>
   </body>
-  </html>
+</html>
