@@ -34,6 +34,11 @@ const runBtn = document.getElementById("evalRunBtn");
 const runResultEl = document.getElementById("evalRunResult");
 
 const historyListEl = document.getElementById("evalHistoryList");
+const pagePrevBtn = document.getElementById("evalPagePrev");
+const pageNextBtn = document.getElementById("evalPageNext");
+const pageStatusEl = document.getElementById("evalPageStatus");
+
+const HISTORY_PAGE_SIZE = 5;
 
 const viewToggleEl = document.getElementById("evalViewToggle");
 const scoreGridCardEl = document.getElementById("evalScoreGridCard");
@@ -45,6 +50,8 @@ let loaded = false;
 let evalView = "card"; // "card" | "graph"
 let scoreChart = null;
 let latestSummary = null;
+let fullHistory = [];
+let historyPage = 1;
 
 // Category colors, shared between the card-view left border accents and the
 // graph-view bar colors, so the legend above the grid means the same thing
@@ -267,6 +274,23 @@ function ratingBadge(rating) {
   return span;
 }
 
+function totalHistoryPages() {
+  return Math.max(1, Math.ceil(fullHistory.length / HISTORY_PAGE_SIZE));
+}
+
+function renderHistoryPage() {
+  const totalPages = totalHistoryPages();
+  historyPage = Math.min(Math.max(1, historyPage), totalPages);
+
+  const start = (historyPage - 1) * HISTORY_PAGE_SIZE;
+  const pageItems = fullHistory.slice(start, start + HISTORY_PAGE_SIZE);
+  renderHistory(pageItems);
+
+  pageStatusEl.textContent = `Page ${historyPage} of ${totalPages} (${fullHistory.length} run${fullHistory.length === 1 ? "" : "s"})`;
+  pagePrevBtn.disabled = historyPage <= 1;
+  pageNextBtn.disabled = historyPage >= totalPages;
+}
+
 function renderHistory(history) {
   historyListEl.replaceChildren();
   if (!history.length) {
@@ -356,10 +380,12 @@ function metricChip(text) {
   return span;
 }
 
-async function loadHistory() {
+async function loadHistory({ resetPage = false } = {}) {
   try {
     const data = await api.get(`/evaluate/history?provider=${encodeURIComponent(currentProvider())}`);
-    renderHistory(data.history || []);
+    fullHistory = data.history || [];
+    if (resetPage) historyPage = 1;
+    renderHistoryPage();
   } catch (err) {
     showToast(err.message || "Failed to load run history", "error");
   }
@@ -368,7 +394,7 @@ async function loadHistory() {
 async function rate(runId, rating) {
   try {
     await api.post(`/evaluate/history/${runId}/rate`, { rating });
-    await Promise.all([loadHistory(), loadSummary()]);
+    await Promise.all([loadHistory({ resetPage: false }), loadSummary()]);
   } catch (err) {
     showToast(err.message || "Failed to save rating", "error");
   }
@@ -393,7 +419,8 @@ async function runEvaluation(question, testCase = null) {
     runResultEl.textContent = data.run.answer;
     runResultEl.classList.remove("hidden");
     showToast("Evaluation run complete", "success");
-    await Promise.all([loadHistory(), loadSummary()]);
+    // Jump back to page 1 so the just-completed run (newest-first) is visible.
+    await Promise.all([loadHistory({ resetPage: true }), loadSummary()]);
   } catch (err) {
     showToast(err.message || "Evaluation run failed", "error");
   } finally {
@@ -443,10 +470,20 @@ export function initEvaluation() {
     await runEvaluation(question);
   });
 
+  pagePrevBtn.addEventListener("click", () => {
+    historyPage -= 1;
+    renderHistoryPage();
+  });
+
+  pageNextBtn.addEventListener("click", () => {
+    historyPage += 1;
+    renderHistoryPage();
+  });
+
   onProviderChange(() => {
     if (loaded) {
       loadCases();
-      loadHistory();
+      loadHistory({ resetPage: true });
       loadSummary();
     }
   });
@@ -455,6 +492,6 @@ export function initEvaluation() {
 export function activateEvaluation() {
   loaded = true;
   loadCases();
-  loadHistory();
+  loadHistory({ resetPage: true });
   loadSummary();
 }

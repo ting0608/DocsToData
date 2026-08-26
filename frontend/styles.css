@@ -1108,6 +1108,24 @@ select:focus,
   color: var(--color-text-muted);
 }
 
+.eval-pagination {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  gap: 14px;
+  margin-top: 14px;
+}
+
+.eval-pagination-status {
+  font-size: 12px;
+  color: var(--color-text-muted);
+  white-space: nowrap;
+}
+
+.eval-pagination .btn:disabled {
+  opacity: 0.4;
+}
+
 /* Header row above the metric grid: category legend + card/graph toggle */
 .eval-metrics-header {
   display: flex;
