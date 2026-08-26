@@ -5,6 +5,7 @@ import os
 import threading
 import uuid
 from datetime import datetime, timezone
+from decimal import Decimal
 from pathlib import Path
 from typing import Any
 
@@ -368,14 +369,48 @@ def summary(provider: str | None = None) -> dict[str, Any]:
     }
 
 
+def _to_dynamo_value(value: Any) -> Any:
+    """Recursively convert a value into DynamoDB-safe types.
+
+    English: boto3's DynamoDB Table resource rejects native Python `float`
+    for its Number type ("Float types are not supported. Use Decimal
+    types instead.") — it only accepts `Decimal`. This project's eval data
+    is full of floats (latency_ms, cost_usd, and every metric inside
+    retrieval_metrics/judge_scores from rag/evaluation.py), so every float
+    anywhere in the item — including nested inside dicts/lists — must be
+    converted before `put_item`/`update_item`. `str(value)` avoids the
+    binary-float-to-Decimal precision surprises `Decimal(value)` directly on
+    a float can produce (e.g. Decimal(0.1) != Decimal("0.1")).
+    中文: boto3 的 DynamoDB Table resource 不接受原生 Python `float` 作為
+    Number 型別（會出現「Float types are not supported. Use Decimal types
+    instead.」），只接受 `Decimal`。這個專案的評估資料裡到處都是 float
+    （latency_ms、cost_usd，以及 rag/evaluation.py 產生、放在
+    retrieval_metrics/judge_scores 裡的每一項指標），所以在
+    `put_item`/`update_item` 之前，物件內任何位置（包含巢狀 dict/list）的
+    float 都必須轉換。用 `str(value)` 是為了避免直接對 float 做
+    `Decimal(value)` 時的二進位浮點數精度問題（例如 Decimal(0.1) 不等於
+    Decimal("0.1")）。
+    """
+
+    if isinstance(value, float):
+        return Decimal(str(value))
+    if isinstance(value, dict):
+        return {k: _to_dynamo_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_to_dynamo_value(v) for v in value]
+    return value
+
+
 def _dynamo_safe(item: dict[str, Any]) -> dict[str, Any]:
-    """Drop `None` values before writing to DynamoDB.
+    """Drop `None` values and convert floats to `Decimal` before writing.
 
     English: DynamoDB's `put_item` rejects top-level `None`/empty-set values
     for some attribute types; simplest fix is to omit unset optional fields
-    rather than writing them as `NULL`.
+    rather than writing them as `NULL`. It also rejects native `float`
+    values anywhere in the item (see `_to_dynamo_value`).
     中文: DynamoDB 的 `put_item` 對某些屬性型別不接受頂層的 `None`/空集合值，
-    最簡單的做法是省略未設定的選填欄位，而不是寫成 `NULL`。
+    最簡單的做法是省略未設定的選填欄位，而不是寫成 `NULL`。它也不接受物件內
+    任何位置的原生 `float` 值（見 `_to_dynamo_value`）。
     """
 
-    return {k: v for k, v in item.items() if v is not None}
+    return {k: _to_dynamo_value(v) for k, v in item.items() if v is not None}
