@@ -2,6 +2,7 @@
 // and normalizes error handling across the app.
 
 import { getAccessToken } from "./auth.js";
+import { API_BASE_URL } from "./config.js";
 
 export class ApiError extends Error {
   constructor(message, status) {
@@ -17,7 +18,7 @@ export async function apiFetch(path, options = {}) {
     headers.set("Authorization", `Bearer ${token}`);
   }
 
-  const res = await fetch(path, { ...options, headers });
+  const res = await fetch(`${API_BASE_URL}${path}`, { ...options, headers });
   const contentType = res.headers.get("content-type") || "";
   const data = contentType.includes("application/json") ? await res.json() : null;
 

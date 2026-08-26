@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Go Invoice</title>
     <link rel="icon" type="image/png" href="/frontend/assets/logo.png" />
-    <link rel="stylesheet" href="/frontend/styles.css" />
+    <link rel="stylesheet" href="/frontend/styles.css?v=2" />
   </head>
   <body>
     <header class="topbar">
@@ -75,32 +75,97 @@
             <p class="subtitle">Run saved test questions against the live pipeline, grade the answers, and track quality over time.</p>
           </div>
 
-          <div class="card-grid summary-grid" id="evalSummaryGrid">
-            <div class="card summary-card">
-              <span class="summary-label">Total runs</span>
-              <span class="summary-value" id="evalTotalRuns">0</span>
+          <div class="eval-metric-quadrant">
+            <div class="eval-metric-group">
+              <h3>Retrieval</h3>
+              <div class="card-grid summary-grid">
+                <div class="card summary-card">
+                  <span class="summary-label">Recall@K</span>
+                  <span class="summary-value" id="evalRecall">–</span>
+                </div>
+                <div class="card summary-card">
+                  <span class="summary-label">Precision@K</span>
+                  <span class="summary-value" id="evalPrecision">–</span>
+                </div>
+                <div class="card summary-card">
+                  <span class="summary-label">MRR</span>
+                  <span class="summary-value" id="evalMrr">–</span>
+                </div>
+              </div>
             </div>
-            <div class="card summary-card">
-              <span class="summary-label">Pass rate</span>
-              <span class="summary-value" id="evalPassRate">–</span>
+
+            <div class="eval-metric-group">
+              <h3>Generation</h3>
+              <div class="card-grid summary-grid">
+                <div class="card summary-card">
+                  <span class="summary-label">Faithfulness</span>
+                  <span class="summary-value" id="evalFaithfulness">–</span>
+                </div>
+                <div class="card summary-card">
+                  <span class="summary-label">Relevance</span>
+                  <span class="summary-value" id="evalRelevance">–</span>
+                </div>
+                <div class="card summary-card">
+                  <span class="summary-label">Groundedness</span>
+                  <span class="summary-value" id="evalGroundedness">–</span>
+                </div>
+              </div>
             </div>
-            <div class="card summary-card">
-              <span class="summary-label">Graded / Ungraded</span>
-              <span class="summary-value" id="evalGraded">0 / 0</span>
+
+            <div class="eval-metric-group">
+              <h3>Quality</h3>
+              <div class="card-grid summary-grid">
+                <div class="card summary-card">
+                  <span class="summary-label">Correctness</span>
+                  <span class="summary-value" id="evalCorrectness">–</span>
+                </div>
+                <div class="card summary-card">
+                  <span class="summary-label">Citation Acc.</span>
+                  <span class="summary-value" id="evalCitationAccuracy">–</span>
+                </div>
+                <div class="card summary-card">
+                  <span class="summary-label">Hallucination</span>
+                  <span class="summary-value" id="evalHallucination">–</span>
+                </div>
+                <div class="card summary-card">
+                  <span class="summary-label">Pass rate (human)</span>
+                  <span class="summary-value" id="evalPassRate">–</span>
+                </div>
+              </div>
             </div>
-            <div class="card summary-card">
-              <span class="summary-label">Avg latency</span>
-              <span class="summary-value" id="evalAvgLatency">0 ms</span>
+
+            <div class="eval-metric-group">
+              <h3>System</h3>
+              <div class="card-grid summary-grid">
+                <div class="card summary-card">
+                  <span class="summary-label">Total runs</span>
+                  <span class="summary-value" id="evalTotalRuns">0</span>
+                </div>
+                <div class="card summary-card">
+                  <span class="summary-label">Avg latency</span>
+                  <span class="summary-value" id="evalAvgLatency">0 ms</span>
+                </div>
+                <div class="card summary-card">
+                  <span class="summary-label">Avg cost / query</span>
+                  <span class="summary-value" id="evalAvgCost">–</span>
+                </div>
+                <div class="card summary-card">
+                  <span class="summary-label">Error rate</span>
+                  <span class="summary-value" id="evalErrorRate">–</span>
+                </div>
+              </div>
             </div>
           </div>
 
           <div class="two-col">
             <div class="card">
               <h2>Test cases</h2>
-              <p class="card-hint">Save a question you want to keep re-testing across runs.</p>
+              <p class="card-hint">Save a question you want to keep re-testing across runs. Ground truth (document/page or chunk_id) enables Retrieval metrics.</p>
               <form id="evalCaseForm" class="stacked-form">
                 <input id="evalCaseQuestion" type="text" placeholder="Question, e.g. What is the total budget?" required />
-                <textarea id="evalCaseExpected" placeholder="Expected answer (optional)" rows="2"></textarea>
+                <textarea id="evalCaseExpected" placeholder="Expected answer (optional, used for Correctness)" rows="2"></textarea>
+                <input id="evalCaseGroundTruthDoc" type="text" placeholder="Ground truth document name (optional)" />
+                <input id="evalCaseGroundTruthPage" type="number" min="1" placeholder="Ground truth page (optional)" />
                 <button type="submit" class="btn btn-primary">Save test case</button>
               </form>
               <ul id="evalCaseList" class="eval-case-list"></ul>
@@ -111,6 +176,10 @@
               <p class="card-hint">Runs against the currently selected provider and indexed documents.</p>
               <form id="evalRunForm" class="stacked-form">
                 <input id="evalRunQuestion" type="text" placeholder="Type a question to evaluate" required />
+                <label class="checkbox-label">
+                  <input id="evalRunJudge" type="checkbox" checked />
+                  Run LLM-as-judge scoring (Generation + Quality metrics; costs one extra call)
+                </label>
                 <button type="submit" class="btn btn-primary" id="evalRunBtn">Run evaluation</button>
               </form>
               <div id="evalRunResult" class="eval-run-result hidden"></div>
@@ -119,7 +188,7 @@
 
           <div class="card">
             <h2>Run history</h2>
-            <p class="card-hint">Grade each answer pass / fail to build up quality metrics.</p>
+            <p class="card-hint">Grade each answer pass / fail, or rely on the LLM judge's Generation/Quality scores.</p>
             <div id="evalHistoryList" class="eval-history-list"></div>
           </div>
         </div>

@@ -1,0 +1,333 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Transform: AWS::Serverless-2016-10-31
+Description: 'DocsToData (Go Invoice) RAG API on AWS Lambda, per architecturev2.txt
+  section 9 ("first production deployment should remain intentionally simple"): Lambda
+  (container image) behind an HTTP API, S3 for uploads + FAISS index sync, DynamoDB
+  for the evaluation dashboard, and an optional Cognito user pool for auth (EnableCognito=false
+  by default -- open dev mode, matching local/Cloud Run today). No VPC, no Bedrock
+  (OpenAI stays the LLM/embedding provider), no custom domain.
+
+  '
+Parameters:
+  OpenAiApiKey:
+    Type: String
+    NoEcho: true
+    Description: 'Your OpenAI API key. Passed as a deploy-time parameter (NoEcho)
+      rather than committed to the template; consider migrating to Secrets Manager
+      later if you rotate this key often.
+
+      '
+  OpenAiChatModel:
+    Type: String
+    Default: gpt-4o-mini
+  OpenAiEmbedModel:
+    Type: String
+    Default: text-embedding-3-small
+  VectorDim:
+    Type: Number
+    Default: 1536
+  CorsAllowOrigins:
+    Type: String
+    Default: '*'
+    Description: 'Comma-separated list of allowed frontend origins. Update this to
+      your Amplify Hosting URL once known (e.g. https://main.xxxxx.amplifyapp.com)
+      instead of leaving it as "*" in production.
+
+      '
+  EnableCognito:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+    - 'true'
+    - 'false'
+    Description: 'Set to "true" to provision a Cognito User Pool and require login.
+      Left "false" for now (per project decision), the API runs in the same open "dev
+      mode" as local/Cloud Run today -- every request is treated as a fixed dev-user
+      identity, no login required. Flip this later and redeploy once you have a Cognito
+      domain prefix and know the Amplify Hosting URL for callback/logout URLs.
+
+      '
+  CognitoDomainPrefix:
+    Type: String
+    Default: ''
+    Description: 'Globally-unique (per AWS region) prefix for the Cognito Hosted UI
+      domain, e.g. "docstodata-yourname". Must be lowercase letters, digits, and hyphens
+      only. Only used when EnableCognito=true. Deploy will fail with a clear "domain
+      already exists" error if this collides with someone else''s pool; just pick
+      a different value and redeploy.
+
+      '
+  AllowedCallbackUrls:
+    Type: CommaDelimitedList
+    Default: http://localhost:8080/
+    Description: 'URLs Cognito is allowed to redirect back to after login. Add your
+      Amplify Hosting URL (with trailing slash, matching frontend/js/auth.js''s redirectUri())
+      once known, comma-separated.
+
+      '
+  AllowedLogoutUrls:
+    Type: CommaDelimitedList
+    Default: http://localhost:8080/
+    Description: Same as AllowedCallbackUrls, but for post-logout redirects.
+  BudgetAlertEmail:
+    Type: String
+    Description: Email address to receive AWS Budgets cost alerts.
+  MonthlyBudgetLimit:
+    Type: Number
+    Default: 20
+    Description: Monthly cost budget in USD that triggers alert emails at 80% and
+      100%.
+Conditions:
+  CognitoEnabled:
+    Fn::Equals:
+    - Ref: EnableCognito
+    - 'true'
+Globals:
+  Function:
+    Timeout: 60
+    MemorySize: 1024
+    EphemeralStorage:
+      Size: 1024
+Resources:
+  DataBucket:
+    Type: AWS::S3::Bucket
+    Properties:
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+        - ServerSideEncryptionByDefault:
+            SSEAlgorithm: AES256
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+      LifecycleConfiguration:
+        Rules:
+        - Id: AbortIncompleteMultipartUploads
+          Status: Enabled
+          AbortIncompleteMultipartUpload:
+            DaysAfterInitiation: 7
+  EvalCasesTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName:
+        Fn::Sub: ${AWS::StackName}-eval-cases
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: id
+        AttributeType: S
+      KeySchema:
+      - AttributeName: id
+        KeyType: HASH
+  EvalHistoryTable:
+    Type: AWS::DynamoDB::Table
+    Properties:
+      TableName:
+        Fn::Sub: ${AWS::StackName}-eval-history
+      BillingMode: PAY_PER_REQUEST
+      AttributeDefinitions:
+      - AttributeName: id
+        AttributeType: S
+      KeySchema:
+      - AttributeName: id
+        KeyType: HASH
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Condition: CognitoEnabled
+    Properties:
+      UserPoolName:
+        Fn::Sub: ${AWS::StackName}-users
+      UsernameAttributes:
+      - email
+      AutoVerifiedAttributes:
+      - email
+      Policies:
+        PasswordPolicy:
+          MinimumLength: 8
+          RequireLowercase: true
+          RequireUppercase: true
+          RequireNumbers: true
+          RequireSymbols: false
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Condition: CognitoEnabled
+    Properties:
+      ClientName:
+        Fn::Sub: ${AWS::StackName}-web
+      UserPoolId:
+        Ref: UserPool
+      GenerateSecret: false
+      ExplicitAuthFlows:
+      - ALLOW_USER_SRP_AUTH
+      - ALLOW_REFRESH_TOKEN_AUTH
+      AllowedOAuthFlows:
+      - code
+      AllowedOAuthFlowsUserPoolClient: true
+      AllowedOAuthScopes:
+      - openid
+      - email
+      - profile
+      SupportedIdentityProviders:
+      - COGNITO
+      CallbackURLs:
+        Ref: AllowedCallbackUrls
+      LogoutURLs:
+        Ref: AllowedLogoutUrls
+  UserPoolDomain:
+    Type: AWS::Cognito::UserPoolDomain
+    Condition: CognitoEnabled
+    Properties:
+      Domain:
+        Ref: CognitoDomainPrefix
+      UserPoolId:
+        Ref: UserPool
+  ApiFunction:
+    Type: AWS::Serverless::Function
+    Metadata:
+      DockerContext: /Users/tingcccc/Desktop/TestProj(self-learn)/DocsToData
+      DockerTag: python3.12-v1
+      Dockerfile: Dockerfile.lambda
+      SamResourceId: ApiFunction
+    Properties:
+      PackageType: Image
+      Architectures:
+      - arm64
+      Environment:
+        Variables:
+          OPENAI_API_KEY:
+            Ref: OpenAiApiKey
+          OPENAI_CHAT_MODEL:
+            Ref: OpenAiChatModel
+          OPENAI_EMBED_MODEL:
+            Ref: OpenAiEmbedModel
+          VECTOR_DIM:
+            Ref: VectorDim
+          DISABLE_OLLAMA: 'true'
+          CORS_ALLOW_ORIGINS:
+            Ref: CorsAllowOrigins
+          S3_BUCKET:
+            Ref: DataBucket
+          S3_PREFIX: go-invoice
+          EVAL_STORE_BACKEND: dynamodb
+          EVAL_CASES_TABLE:
+            Ref: EvalCasesTable
+          EVAL_HISTORY_TABLE:
+            Ref: EvalHistoryTable
+          COGNITO_REGION:
+            Fn::If:
+            - CognitoEnabled
+            - Ref: AWS::Region
+            - ''
+          COGNITO_USER_POOL_ID:
+            Fn::If:
+            - CognitoEnabled
+            - Ref: UserPool
+            - ''
+          COGNITO_CLIENT_ID:
+            Fn::If:
+            - CognitoEnabled
+            - Ref: UserPoolClient
+            - ''
+          COGNITO_DOMAIN:
+            Fn::If:
+            - CognitoEnabled
+            - Fn::Sub: https://${CognitoDomainPrefix}.auth.${AWS::Region}.amazoncognito.com
+            - ''
+      Policies:
+      - S3CrudPolicy:
+          BucketName:
+            Ref: DataBucket
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: EvalCasesTable
+      - DynamoDBCrudPolicy:
+          TableName:
+            Ref: EvalHistoryTable
+      Events:
+        Root:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: HttpApi
+            Path: /
+            Method: ANY
+        Proxy:
+          Type: HttpApi
+          Properties:
+            ApiId:
+              Ref: HttpApi
+            Path: /{proxy+}
+            Method: ANY
+      ImageUri: apifunction:python3.12-v1
+  ApiFunctionLogGroup:
+    Type: AWS::Logs::LogGroup
+    Properties:
+      LogGroupName:
+        Fn::Sub: /aws/lambda/${ApiFunction}
+      RetentionInDays: 14
+  HttpApi:
+    Type: AWS::Serverless::HttpApi
+    Properties:
+      Description:
+        Fn::Sub: ${AWS::StackName} HTTP API
+  MonthlyBudget:
+    Type: AWS::Budgets::Budget
+    Properties:
+      Budget:
+        BudgetName:
+          Fn::Sub: ${AWS::StackName}-monthly-budget
+        BudgetType: COST
+        TimeUnit: MONTHLY
+        BudgetLimit:
+          Amount:
+            Ref: MonthlyBudgetLimit
+          Unit: USD
+      NotificationsWithSubscribers:
+      - Notification:
+          NotificationType: ACTUAL
+          ComparisonOperator: GREATER_THAN
+          Threshold: 80
+          ThresholdType: PERCENTAGE
+        Subscribers:
+        - SubscriptionType: EMAIL
+          Address:
+            Ref: BudgetAlertEmail
+      - Notification:
+          NotificationType: FORECASTED
+          ComparisonOperator: GREATER_THAN
+          Threshold: 100
+          ThresholdType: PERCENTAGE
+        Subscribers:
+        - SubscriptionType: EMAIL
+          Address:
+            Ref: BudgetAlertEmail
+Outputs:
+  ApiUrl:
+    Description: 'HTTP API invoke URL. Set this as the Amplify environment variable
+      API_BASE_URL (see amplify.yml) so the frontend calls the right backend.
+
+      '
+    Value:
+      Fn::Sub: https://${HttpApi}.execute-api.${AWS::Region}.amazonaws.com
+  DataBucketName:
+    Value:
+      Ref: DataBucket
+  EvalCasesTableName:
+    Value:
+      Ref: EvalCasesTable
+  EvalHistoryTableName:
+    Value:
+      Ref: EvalHistoryTable
+  UserPoolId:
+    Condition: CognitoEnabled
+    Value:
+      Ref: UserPool
+  UserPoolClientId:
+    Condition: CognitoEnabled
+    Value:
+      Ref: UserPoolClient
+  CognitoHostedUiDomain:
+    Condition: CognitoEnabled
+    Description: Cognito Hosted UI base URL (COGNITO_DOMAIN).
+    Value:
+      Fn::Sub: https://${CognitoDomainPrefix}.auth.${AWS::Region}.amazoncognito.com

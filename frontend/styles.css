@@ -508,12 +508,14 @@ code {
 }
 
 .message {
+  width: fit-content;
   max-width: 76%;
   padding: 10px 12px;
   border-radius: 10px;
   margin-bottom: 8px;
   line-height: 1.45;
   white-space: pre-wrap;
+  word-break: break-word;
   animation: rise-in var(--duration-base) var(--ease-standard);
 }
 
@@ -1104,6 +1106,69 @@ select:focus,
 .rating-badge.pending {
   background: var(--color-surface-muted);
   color: var(--color-text-muted);
+}
+
+.eval-metric-quadrant {
+  display: grid;
+  grid-template-columns: repeat(auto-fit, minmax(260px, 1fr));
+  gap: 16px;
+  margin-bottom: 20px;
+}
+
+.eval-metric-group h3 {
+  font-size: 13px;
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  color: var(--color-text-muted);
+  margin: 0 0 8px;
+}
+
+.eval-metric-group .summary-grid {
+  grid-template-columns: repeat(auto-fit, minmax(110px, 1fr));
+  gap: 8px;
+}
+
+.eval-metric-group .summary-card {
+  padding: 10px;
+}
+
+.eval-metric-group .summary-value {
+  font-size: 18px;
+}
+
+.eval-history-item.has-error {
+  border-color: var(--color-danger);
+  background: var(--color-danger-bg);
+}
+
+.eval-history-metrics {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 6px;
+  margin-top: 2px;
+}
+
+.eval-metric-chip {
+  font-size: 11px;
+  padding: 3px 8px;
+  border-radius: 999px;
+  background: var(--color-surface-muted);
+  color: var(--color-text-muted);
+  border: 1px solid var(--color-border);
+}
+
+.checkbox-label {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  font-size: 13px;
+  color: var(--color-text-muted);
+  cursor: pointer;
+}
+
+.checkbox-label input[type="checkbox"] {
+  width: auto;
+  margin: 0;
 }
 
 /* ---------------------------------------------------------------------- */

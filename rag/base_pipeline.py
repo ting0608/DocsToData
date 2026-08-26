@@ -7,7 +7,7 @@ from rag.chunk_metadata import stamp_chunk_metadata
 from rag.chunking_strategies import DEFAULT_STRATEGY, ChunkingStrategy, chunk_document
 from rag.graph.workflow import run_rag_graph
 from rag.llm_gateway import LLMGateway
-from rag.models import SearchHit
+from rag.models import SearchHit, TokenUsage
 from rag.pdf_parser import extract_pdf_pages
 from rag.retrieval import hybrid_retrieve
 from rag.vector_store import FaissStore
@@ -42,13 +42,16 @@ class BaseRagPipeline:
         vector_dim: int,
         embedding_model_name: str,
         default_index_dir: str,
+        chat_model_name: str = "",
         chunking_strategy: ChunkingStrategy | None = None,
     ) -> None:
         self.gateway = gateway
         self.vector_dim = vector_dim
         self.embedding_model_name = embedding_model_name
+        self.chat_model_name = chat_model_name
         self.default_index_dir = default_index_dir
         self.chunking_strategy = chunking_strategy or _default_chunking_strategy()
+        self._usage_accumulator = TokenUsage()
 
     def _load_or_create_store(self, out_dir: str) -> FaissStore:
         index_path = Path(out_dir) / "index.faiss"
@@ -153,7 +156,10 @@ class BaseRagPipeline:
         )
 
     def chat(self, system_prompt: str, user_prompt: str) -> str:
-        return self.gateway.generate(user_prompt, system=system_prompt, temperature=0.1)
+        result = self.gateway.generate(user_prompt, system=system_prompt, temperature=0.1)
+        self._usage_accumulator.prompt_tokens += self.gateway.last_usage.prompt_tokens
+        self._usage_accumulator.completion_tokens += self.gateway.last_usage.completion_tokens
+        return result
 
     def answer(
         self,
@@ -167,12 +173,19 @@ class BaseRagPipeline:
 
         English: Returns the v2 structured response shape from
         architecturev2.txt section 6: `{answer, intent, sources, citations,
-        confidence}`.
+        confidence}`, plus a `usage: TokenUsage` field accumulated across
+        every `chat()` call made during this run (intent classification +
+        generation) so the evaluation framework can compute a per-query cost
+        estimate via `rag/pricing.py`.
         中文: 回傳對應 architecturev2.txt 第 6 節的 v2 結構化回應格式：
-        `{answer, intent, sources, citations, confidence}`。
+        `{answer, intent, sources, citations, confidence}`，並額外附上
+        `usage: TokenUsage`，累加本次執行過程中所有 `chat()` 呼叫的 token 數
+        （意圖分類 + 生成回答），讓評估框架可透過 `rag/pricing.py` 估算每次
+        查詢的成本。
         """
 
-        return run_rag_graph(
+        self._usage_accumulator = TokenUsage()
+        result = run_rag_graph(
             backend=self,
             question=question,
             in_dir=in_dir or self.default_index_dir,
@@ -180,3 +193,11 @@ class BaseRagPipeline:
             intent=intent,  # type: ignore[arg-type]
             source_filter=source_filter,
         )
+        # Copy, not the same object: callers may make further `chat()` calls
+        # after `answer()` returns (e.g. an LLM-judge pass in the evaluation
+        # framework) which must not silently mutate an already-returned result.
+        result["usage"] = TokenUsage(
+            prompt_tokens=self._usage_accumulator.prompt_tokens,
+            completion_tokens=self._usage_accumulator.completion_tokens,
+        )
+        return result

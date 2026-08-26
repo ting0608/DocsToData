@@ -1,0 +1,231 @@
+DocsToData — RAG Evaluation Framework
+========================================
+
+This replaces the old "human pass/fail only" evaluation with the four-quadrant
+metric set from architecturev2.txt section 7:
+
+┌───────────────────────────────────────────────────────┐
+│                  RAG Evaluation                       │
+├──────────────┬──────────────┬──────────────┬───────────┤
+│ Retrieval    │ Generation   │ Quality      │ System    │
+│              │              │              │           │
+│ Recall@K     │ Faithfulness │ Correctness  │ Latency   │
+│ Precision@K  │ Relevance    │ Citation Acc │ Cost      │
+│ MRR          │ Groundedness │ Hallucination│ Error %   │
+└──────────────┴──────────────┴──────────────┴───────────┘
+
+Every `POST /evaluate/run` call now computes all four columns in one pass
+(where the data needed for that column is available) and stores the result
+on the run record. `GET /evaluate/summary` averages each metric across the
+run history. The Evaluation Dashboard in the web UI renders this as four
+metric groups above the test-case/run-history panels.
+
+
+Where the code lives
+-----------------------
+rag/models.py          TokenUsage dataclass (prompt/completion token counts)
+rag/llm_gateway.py      Each gateway (OpenAI/Ollama/Bedrock) now sets
+                        `self.last_usage` after every generate() call
+rag/base_pipeline.py    Accumulates usage across all chat() calls in one
+                        answer() run, returns it as result["usage"]
+rag/pricing.py          $/1K-token price table + estimate_chat_cost_usd()
+rag/evaluation.py       compute_retrieval_metrics() + judge_generation()
+backend/eval_store.py   Persists the extra fields per run, summary() averages
+backend/app.py          /evaluate/run wires all of the above together
+frontend/js/evaluation.js + index.html   Renders the four metric groups
+
+
+1. Retrieval — Recall@K, Precision@K, MRR
+--------------------------------------------
+How it's measured: rag/evaluation.py::compute_retrieval_metrics()
+
+This is pure math, no LLM call, deterministic and free. It compares the
+ordered list of citations a run actually retrieved against a "ground truth"
+set attached to the test case.
+
+Ground truth is defined per test case (EvalCaseRequest.ground_truth /
+backend/eval_store.py::add_case) as a list of items, each either:
+  - {"chunk_id": "..."}                    exact chunk match, most precise
+  - {"document": "...", "page": N}         "the answer is on page N of doc"
+  - {"document": "..."}                    "the answer is somewhere in doc"
+
+You supply this by hand when saving a test case — DocsToData doesn't
+auto-generate ground truth, since knowing "where the real answer lives" is
+inherently a human judgment call (architecturev2.txt section 7's own
+example: `{"question": "...", "expected_pages": [12]}`).
+
+For a run against a case with ground truth, at query time:
+  1. Take the ordered citations list the pipeline returned (order = rank,
+     rag/graph/nodes.py::_hits_to_citations already carries document/page/
+     chunk_id/score per retrieved chunk).
+  2. Truncate to the first K = the run's top_k (default 5).
+  3. For each ground-truth item, check whether any citation in that top-K
+     list matches it (chunk_id exact match takes priority; otherwise
+     document+page, or document alone).
+  4. Precision@K = matched ground-truth items / K citations returned.
+     Recall@K    = matched ground-truth items / total ground-truth items.
+     MRR         = 1 / (rank of the first matching citation), or 0 if none
+                   of the top-K citations matched anything in ground truth.
+
+If a case has no ground truth, retrieval_metrics is stored as `null` on the
+run (not zeros) — the dashboard shows "no data" rather than a misleading 0%,
+and summary() only averages over runs that actually have this data
+(`retrieval_scored_runs` tells you how many that was).
+
+Cost: $0, no extra LLM call. Runs even when run_judge=false.
+
+
+2 & 3. Generation + Quality — Faithfulness, Relevance, Groundedness,
+       Correctness, Citation Accuracy, Hallucination
+------------------------------------------------------------------------
+How it's measured: rag/evaluation.py::judge_generation() ("LLM-as-judge")
+
+Unlike Retrieval, these six metrics require actual language understanding
+(is this answer supported by the context? does it address the question?),
+so they're scored by asking an LLM to grade the run's own answer. This is a
+real extra LLM call — it costs tokens and its output isn't perfectly
+deterministic — so it's opt-in per run via `EvalRunRequest.run_judge`
+(defaults to true; the UI has a checkbox to turn it off).
+
+The judge is given:
+  - the question
+  - the retrieved context (documents + page numbers, built the same way as
+    the context passed to the answering LLM)
+  - the assistant's answer
+  - the citations returned with the answer
+  - the human-written expected_answer, if one was saved on the case
+
+...and asked to return strict JSON with a score from 0.0-1.0 for each of:
+
+  faithfulness        does the answer only state things the context
+                       actually supports? (this replaces the old heuristic
+                       "average retrieval score" confidence field from
+                       rag/graph/nodes.py::_compute_confidence, which was
+                       explicitly documented as NOT faithfulness)
+  relevance            does the answer actually address the question asked?
+  groundedness          is every specific claim traceable to a citation?
+  correctness           how well does the answer match expected_answer
+                       (null if no expected_answer was provided for that
+                       run — distinct from "scored 0")
+  citation_accuracy     do the returned citations actually contain the info
+                       used in the answer?
+  hallucination_rate    fraction of the answer that's fabricated / not
+                       supported (0.0 = no hallucination, 1.0 = fully
+                       hallucinated)
+
+The judge currently uses the *same* pipeline/model that answered the
+question (`pipeline.chat`, passed as judge_generation's chat_fn parameter).
+This keeps the extra cost proportional to your normal per-query cost and
+needs no new provider wiring, but it does mean the judge and the answerer
+share the same blind spots — a genuinely independent eval setup would pass
+a different (typically stronger) model as chat_fn instead. That's a natural
+next step if judge scores start looking too lenient.
+
+If the judge's response can't be parsed as JSON (rare, but LLMs occasionally
+wrap output in markdown or add commentary despite instructions), all six
+scores are stored as `null` and `judge_scores.judge_error` explains why —
+this never fails the whole evaluation run, it just means that run has no
+Generation/Quality scores.
+
+Cost: 1 extra LLM call per run (skipped entirely if run_judge=false).
+
+
+4. System — Latency, Cost, Error %
+-------------------------------------
+How it's measured: backend/app.py::evaluate_run() + rag/pricing.py
+
+Latency: wall-clock time around pipeline.answer(), measured with
+time.perf_counter() (unchanged from before this change) — includes
+retrieval + any intent classification + generation, i.e. everything the
+user actually waits for.
+
+Cost: every LLMGateway implementation (OpenAI/Ollama/Bedrock, in
+rag/llm_gateway.py) now records prompt/completion token counts from the
+provider's own API response after each generate() call:
+  - OpenAI:   completion.usage.prompt_tokens / completion_tokens
+  - Ollama:   response's prompt_eval_count / eval_count fields
+  - Bedrock:  response["usage"]["inputTokens"] / ["outputTokens"]
+BaseRagPipeline.chat() accumulates these across every LLM call made during
+one answer() run (intent classification + generation, and the judge call
+if run_judge=true) and returns the total as result["usage"].
+
+rag/pricing.py holds a hardcoded $/1000-token price table (checked against
+public provider pricing pages as of August 2026 — OpenAI's platform.openai.
+com/pricing, AWS Bedrock's pricing page — re-verify before trusting this for
+a real budget). Ollama is always $0 (it's your own hardware, no metered
+API), everything else uses estimate_chat_cost_usd(model, usage).
+If a chat model isn't in the price table yet, cost_usd is stored as `null`
+(unknown), not 0 — add it to _CHAT_PRICE_PER_1K in rag/pricing.py to enable
+cost tracking for that model.
+
+Error %: previously, a failed run (bad question, missing index, provider
+timeout) just raised an HTTP error and vanished — it never became a history
+entry, so failures were invisible to the dashboard. Now /evaluate/run
+records a run with `error` set to the exception message even when the
+pipeline call fails, before re-raising the HTTP 400 to the caller. summary()
+computes error_rate_pct = (runs with an error) / (total runs).
+
+
+Reading the numbers in summary()
+-----------------------------------
+GET /evaluate/summary?provider=ollama returns, per run history filtered by
+provider:
+
+  total_runs, error_count, error_rate_pct        all runs, including failures
+  pass_count, fail_count, pass_rate_pct           human-graded pass/fail (only
+                                                   counted on non-errored runs)
+  avg_recall_at_k, avg_precision_at_k, avg_mrr,
+  retrieval_scored_runs                           averaged only over runs
+                                                   whose case had ground truth
+  avg_faithfulness, avg_relevance, avg_groundedness,
+  avg_correctness, avg_citation_accuracy,
+  avg_hallucination_rate, judge_scored_runs       averaged only over runs
+                                                   where run_judge succeeded
+  avg_latency_ms                                  averaged over ALL runs
+                                                   (including errors, which
+                                                   report 0ms)
+  avg_cost_usd, cost_known_runs                   averaged only over runs
+                                                   with a known-priced model
+
+Any average field is `null` when there's no underlying data yet (e.g. no
+case in this run history has ground truth) — the dashboard renders that as
+"–" rather than a misleading 0%.
+
+
+How to use it
+----------------
+1. Save a test case (POST /evaluate/cases or the "Test cases" card in the
+   UI): question + optional expected_answer + optional ground_truth
+   ({"document": "...", "page": N} or {"chunk_id": "..."}).
+2. Run it (POST /evaluate/run or click "Run" next to the case). Leave
+   run_judge on to get Generation/Quality scores; turn it off if you just
+   want a quick Retrieval + latency check without the extra LLM call.
+3. Check the four metric groups at the top of the Evaluation Dashboard, or
+   call GET /evaluate/summary for the raw numbers.
+4. Optionally grade the answer pass/fail by hand too — that's still tracked
+   separately (avg pass_rate_pct) alongside the automated scores, since a
+   human's judgment of "is this actually a good answer for my use case" and
+   an LLM judge's faithfulness/relevance scores are complementary, not the
+   same thing.
+
+
+Known limitations / honest caveats
+-------------------------------------
+- Ground truth must be entered by hand per test case. There's no automatic
+  way to derive "the right pages/chunks" from a question.
+- The LLM judge shares the same model as the answering pipeline by default,
+  which can make it too lenient toward that model's own failure modes. Pass
+  a stronger/different chat_fn to judge_generation() for a truly independent
+  eval if this becomes a problem.
+- Pricing in rag/pricing.py is a hardcoded snapshot, not a live billing API
+  call — re-verify against the provider's current pricing page before using
+  cost_usd for a real budget decision, and add missing models to the table
+  as needed.
+- hallucination_rate, groundedness, etc. are LLM self-assessments, not a
+  formally validated NLI/entailment model — treat them as a directional
+  signal (did this change make things better or worse?) rather than an
+  absolute ground truth score.
+- architecturev2.txt section 7 also lists Hit Rate and NDCG as retrieval
+  metrics; those aren't implemented yet (Recall@K/Precision@K/MRR cover the
+  most common cases) — add them to rag/evaluation.py::compute_retrieval_metrics
+  if you need them.

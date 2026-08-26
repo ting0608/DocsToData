@@ -1,0 +1,22 @@
+version = 0.1
+
+[default.deploy.parameters]
+stack_name = "docstodata-api"
+region = "ap-southeast-1"
+profile = "tingcccc-admin"
+confirm_changeset = true
+capabilities = "CAPABILITY_IAM"
+image_repositories = []
+resolve_s3 = true
+resolve_image_repos = true
+
+# Secrets (OpenAiApiKey) and account-specific values (BudgetAlertEmail,
+# CognitoDomainPrefix) are intentionally NOT stored here — this file is
+# committed to the repo. Pass them explicitly on every deploy, e.g.:
+#
+#   sam deploy \
+#     --parameter-overrides \
+#       OpenAiApiKey=sk-... \
+#       BudgetAlertEmail=you@example.com \
+#       CognitoDomainPrefix=docstodata-yourname \
+#       CorsAllowOrigins=https://main.xxxxx.amplifyapp.com

@@ -7,6 +7,7 @@ import requests
 from openai import OpenAI
 
 from rag.config import Settings as OpenAISettings
+from rag.models import TokenUsage
 from rag_aws.config import BedrockSettings
 from rag_local.config import LocalSettings
 
@@ -17,11 +18,18 @@ class LLMGateway(Protocol):
     English: This is the "LLM Gateway" from architecturev2.txt section 5 —
     the application talks to `generate()`/`embed()` only, so swapping Ollama
     for Bedrock (or OpenAI) never requires touching pipeline, retrieval, or
-    graph code.
+    graph code. Every implementation also exposes `last_usage`, updated
+    after each `generate()` call, so callers can accumulate token counts for
+    cost estimation (`rag/pricing.py`) without changing `generate()`'s
+    return type.
     中文: 對應 architecturev2.txt 第 5 節的「LLM Gateway」。應用程式只透過
     `generate()`/`embed()` 溝通，因此更換 Ollama、Bedrock 或 OpenAI 時完全
-    不需要修改 pipeline、檢索或 graph 相關程式碼。
+    不需要修改 pipeline、檢索或 graph 相關程式碼。每個實作都會在每次
+    `generate()` 呼叫後更新 `last_usage`，讓呼叫端可以累加 token 數以估算成本
+    （`rag/pricing.py`），且不需要更動 `generate()` 的回傳型別。
     """
+
+    last_usage: TokenUsage
 
     def generate(
         self,
@@ -44,6 +52,7 @@ class OpenAIGateway:
     def __init__(self, settings: OpenAISettings) -> None:
         self.settings = settings
         self.client = OpenAI(api_key=settings.openai_api_key)
+        self.last_usage = TokenUsage()
 
     def generate(
         self,
@@ -64,6 +73,11 @@ class OpenAIGateway:
             messages=messages,
             temperature=temperature,
             max_tokens=max_tokens,
+        )
+        usage = completion.usage
+        self.last_usage = TokenUsage(
+            prompt_tokens=usage.prompt_tokens if usage else 0,
+            completion_tokens=usage.completion_tokens if usage else 0,
         )
         return completion.choices[0].message.content or ""
 
@@ -92,6 +106,7 @@ class OllamaGateway:
 
     def __init__(self, settings: LocalSettings) -> None:
         self.settings = settings
+        self.last_usage = TokenUsage()
 
     def generate(
         self,
@@ -121,6 +136,14 @@ class OllamaGateway:
         response = requests.post(url, json=payload, timeout=300)
         response.raise_for_status()
         data = response.json()
+        # Ollama's non-streamed /api/chat response includes prompt_eval_count
+        # (input tokens) and eval_count (output tokens) — free to run, but we
+        # still capture these so latency/throughput can be compared apples to
+        # apples against OpenAI/Bedrock in the evaluation dashboard.
+        self.last_usage = TokenUsage(
+            prompt_tokens=int(data.get("prompt_eval_count", 0) or 0),
+            completion_tokens=int(data.get("eval_count", 0) or 0),
+        )
         return data.get("message", {}).get("content", "")
 
     def _embed_one_raw(self, text: str) -> list[float]:
@@ -162,6 +185,7 @@ class BedrockGateway:
     def __init__(self, settings: BedrockSettings) -> None:
         self.settings = settings
         self._client = None
+        self.last_usage = TokenUsage()
 
     def _get_client(self):
         if self._client is None:
@@ -197,6 +221,11 @@ class BedrockGateway:
             kwargs["system"] = [{"text": system}]
 
         response = client.converse(**kwargs)
+        usage = response.get("usage", {}) or {}
+        self.last_usage = TokenUsage(
+            prompt_tokens=int(usage.get("inputTokens", 0) or 0),
+            completion_tokens=int(usage.get("outputTokens", 0) or 0),
+        )
         content = response.get("output", {}).get("message", {}).get("content", [])
         for block in content:
             if "text" in block:

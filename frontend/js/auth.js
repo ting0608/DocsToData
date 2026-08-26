@@ -5,6 +5,8 @@
 // 中文: Token 存放在記憶體與 sessionStorage（不用 localStorage），降低 access
 // token 在瀏覽器重啟後仍被保留的風險。
 
+import { API_BASE_URL } from "./config.js";
+
 const STORAGE_KEY = "d2d_auth_tokens";
 const PKCE_VERIFIER_KEY = "d2d_pkce_verifier";
 const PKCE_STATE_KEY = "d2d_pkce_state";
@@ -32,7 +34,7 @@ function saveTokens(next) {
 
 export async function fetchAuthConfig() {
   if (cachedConfig) return cachedConfig;
-  const res = await fetch("/auth/config");
+  const res = await fetch(`${API_BASE_URL}/auth/config`);
   cachedConfig = await res.json();
   return cachedConfig;
 }
@@ -180,7 +182,7 @@ export async function fetchCurrentUser() {
   const headers = {};
   const token = getAccessToken();
   if (token) headers.Authorization = `Bearer ${token}`;
-  const res = await fetch("/auth/me", { headers });
+  const res = await fetch(`${API_BASE_URL}/auth/me`, { headers });
   if (!res.ok) return null;
   const data = await res.json();
   return data.user;

@@ -25,4 +25,5 @@ class RagPipeline(BaseRagPipeline):
             vector_dim=self.settings.vector_dim,
             embedding_model_name=self.settings.openai_embed_model,
             default_index_dir="data/index",
+            chat_model_name=self.settings.openai_chat_model,
         )

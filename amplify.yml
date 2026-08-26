@@ -1,0 +1,44 @@
+version: 1
+# AWS Amplify Hosting build spec for the DocsToData frontend.
+#
+# English: The frontend is plain static HTML/CSS/JS with no build tooling,
+# but two things need to happen at build time rather than being committed
+# to the repo:
+#   1. `frontend/index.html` and `frontend/styles.css` reference assets as
+#      `/frontend/...` (correct when FastAPI mounts `/frontend` as a static
+#      directory for local/Docker/Cloud Run use). On Amplify, `frontend/`
+#      itself becomes the site root, so those paths are rewritten to `/...`
+#      here rather than maintaining two copies of the HTML/CSS.
+#   2. `frontend/js/config.js` hardcodes `API_BASE_URL = ""` (same-origin),
+#      which is only correct when FastAPI serves both API and frontend. On
+#      Amplify the frontend is a separate origin from the API Gateway
+#      backend, so this build step overwrites that file using the
+#      `API_BASE_URL` Amplify environment variable (set in the Amplify
+#      Console -> App settings -> Environment variables, to the API Gateway
+#      invoke URL output by `sam deploy`).
+# 中文: 前端是純靜態 HTML/CSS/JS，沒有任何建置工具，但有兩件事必須在建置階段
+# 處理，而不是寫死進 repo：
+#   1. `frontend/index.html` 與 `frontend/styles.css` 用 `/frontend/...`
+#      引用資源（這在本機/Docker/Cloud Run 下是對的，因為 FastAPI 把
+#      `/frontend` 掛載為靜態目錄）。在 Amplify 上 `frontend/` 本身就是站點
+#      根目錄，因此這裡會把路徑改寫成 `/...`，而不是維護兩份 HTML/CSS。
+#   2. `frontend/js/config.js` 寫死 `API_BASE_URL = ""`（同源），這只有在
+#      FastAPI 同時提供 API 與前端時才是對的。在 Amplify 上前端與 API
+#      Gateway 後端是不同 origin，因此這個建置步驟會用 Amplify 環境變數
+#      `API_BASE_URL`（在 Amplify Console -> App settings -> Environment
+#      variables 設定，值為 `sam deploy` 輸出的 API Gateway invoke URL）
+#      覆寫這個檔案。
+frontend:
+  phases:
+    build:
+      commands:
+        - mkdir -p dist
+        - cp -r frontend/. dist/
+        - sed -i.bak 's#/frontend/#/#g' dist/index.html && rm dist/index.html.bak
+        - echo "export const API_BASE_URL = \"${API_BASE_URL:-}\";" > dist/js/config.js
+  artifacts:
+    baseDirectory: dist
+    files:
+      - '**/*'
+  cache:
+    paths: []

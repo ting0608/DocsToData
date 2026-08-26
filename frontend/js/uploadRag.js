@@ -5,6 +5,7 @@
 
 import { api, ApiError } from "./api.js";
 import { getAccessToken } from "./auth.js";
+import { API_BASE_URL } from "./config.js";
 import { currentProvider, onProviderChange } from "./state.js";
 import { showToast } from "./toast.js";
 
@@ -283,7 +284,7 @@ async function ingestFiles(fileList) {
   // Multipart uploads must not set Content-Type manually (the browser sets
   // the multipart boundary), so only the Authorization header is attached.
   const token = getAccessToken();
-  const res = await fetch("/ingest-upload", {
+  const res = await fetch(`${API_BASE_URL}/ingest-upload`, {
     method: "POST",
     body: form,
     headers: token ? { Authorization: `Bearer ${token}` } : {},

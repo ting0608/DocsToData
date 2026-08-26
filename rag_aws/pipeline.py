@@ -32,4 +32,5 @@ class BedrockRagPipeline(BaseRagPipeline):
             vector_dim=self.settings.vector_dim,
             embedding_model_name=self.settings.bedrock_embed_model_id,
             default_index_dir="data/index_bedrock",
+            chat_model_name=self.settings.bedrock_chat_model_id,
         )

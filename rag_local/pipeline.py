@@ -25,4 +25,5 @@ class LocalRagPipeline(BaseRagPipeline):
             vector_dim=self.settings.vector_dim,
             embedding_model_name=self.settings.ollama_embed_model,
             default_index_dir="data/index_local",
+            chat_model_name=self.settings.ollama_chat_model,
         )

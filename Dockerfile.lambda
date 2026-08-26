@@ -1,0 +1,33 @@
+# Lambda container image for the DocsToData FastAPI backend.
+#
+# English: Separate from the root `Dockerfile` (which targets Cloud
+# Run/uvicorn) because Lambda container images must be built on the
+# `public.ecr.aws/lambda/python` base image and invoke a specific handler
+# function through the Lambda Runtime Interface Client (already baked into
+# that base image), rather than running a long-lived uvicorn server.
+# `faiss-cpu`/`numpy`/`PyMuPDF` are large enough that a container image
+# (10GB limit) is a much easier fit than a zip deployment package (250MB
+# unzipped limit, even with layers).
+# 中文: 與專案根目錄的 `Dockerfile`（給 Cloud Run/uvicorn 用）分開，因為 Lambda
+# 容器映像必須以 `public.ecr.aws/lambda/python` 為基底建置，並透過該基底映像
+# 內建的 Lambda Runtime Interface Client 呼叫指定的 handler 函式，而不是跑一個
+# 長駐的 uvicorn server。`faiss-cpu`/`numpy`/`PyMuPDF` 體積較大，容器映像
+# （10GB 上限）比 zip 部署套件（未解壓 250MB 上限，即使搭配 layer 也一樣）
+#容易容納得多。
+FROM public.ecr.aws/lambda/python:3.12
+
+WORKDIR ${LAMBDA_TASK_ROOT}
+
+COPY requirements.txt requirements-lambda.txt ./
+RUN pip install --no-cache-dir -r requirements.txt -r requirements-lambda.txt
+
+COPY backend ./backend
+COPY rag ./rag
+COPY rag_local ./rag_local
+COPY rag_aws ./rag_aws
+
+# The frontend is deployed separately to Amplify Hosting; it is not needed
+# inside the Lambda image (backend/app.py mounts it only if the directory
+# is present, so its absence here is harmless).
+
+CMD ["backend.lambda_handler.handler"]
