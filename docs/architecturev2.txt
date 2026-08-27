@@ -1,6 +1,26 @@
-# DocsToData v2 — Production RAG Architecture
+# Go Invoice v2 — Production RAG Architecture
+
+> Status note (updated after implementation): this document was written
+> up front as a design/aspiration doc, in "should" language, before most
+> of it was built. The project has since been renamed from "DocsToData" to
+> "Go Invoice" (see frontend/index.html, backend/app.py's FastAPI title,
+> docker-compose.yml). Each section below now has a short "Status:" line
+> noting what's actually implemented, partially implemented, or still not
+> done, so this file stays useful as a living reference instead of only a
+> historical plan. See docs/evaluation.txt for the evaluation framework in
+> full implementation detail, and docs/README.md for the current project
+> structure and deployment instructions (Cloud Run and AWS Lambda/SAM).
 
 ## 1. Architecture Overview
+
+Status: partially implemented. The backend (FastAPI, Document/Query/
+Evaluation services, S3, FAISS, LLM Gateway, structured response) matches
+this diagram. The frontend does NOT — despite the "React Web User
+Interface" box below, the actual frontend (frontend/index.html +
+frontend/js/*.js) is plain HTML/CSS with ES modules and no build step, no
+React. Update this diagram's frontend box if a React rewrite is still
+planned, or drop the React framing if the plain-JS approach is the final
+choice.
 
 ```text
                          ┌──────────────────────┐
@@ -137,6 +157,11 @@ The metadata allows the system to provide source citations and makes it possible
 ---
 
 # 3. Chunking Strategy
+
+Status: implemented. All four strategies below exist in
+rag/chunking_strategies.py (chunk_document() dispatches by strategy name:
+"page", "fixed_token", "semantic", "parent_child"). Per-request override is
+supported via BaseRagPipeline.ingest_pdf()'s chunking_strategy parameter.
 
 The initial implementation should retain the existing page-aware strategy.
 

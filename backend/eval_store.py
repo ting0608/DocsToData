@@ -99,7 +99,7 @@ def list_cases(provider: str | None = None) -> list[dict[str, Any]]:
     if _use_dynamo():
         table = _dynamo().Table(_cases_table_name())
         items = table.scan().get("Items", [])
-        cases = [dict(item) for item in items]
+        cases = [_from_dynamo_value(dict(item)) for item in items]
     else:
         with _LOCK:
             cases = _read_json_list(_CASES_PATH)
@@ -170,7 +170,7 @@ def get_case(case_id: str) -> dict[str, Any] | None:
     if _use_dynamo():
         table = _dynamo().Table(_cases_table_name())
         item = table.get_item(Key={"id": case_id}).get("Item")
-        return dict(item) if item else None
+        return _from_dynamo_value(dict(item)) if item else None
 
     for case in list_cases():
         if case.get("id") == case_id:
@@ -256,7 +256,7 @@ def list_history(provider: str | None = None, limit: int = 200) -> list[dict[str
     if _use_dynamo():
         table = _dynamo().Table(_history_table_name())
         items = table.scan().get("Items", [])
-        history = [dict(item) for item in items]
+        history = [_from_dynamo_value(dict(item)) for item in items]
     else:
         with _LOCK:
             history = _read_json_list(_HISTORY_PATH)
@@ -278,7 +278,7 @@ def rate_run(run_id: str, rating: str, notes: str | None = None) -> dict[str, An
             UpdateExpression="SET rating = :r, notes = :n",
             ExpressionAttributeValues={":r": rating, ":n": notes},
         )
-        updated = dict(existing)
+        updated = _from_dynamo_value(dict(existing))
         updated["rating"] = rating
         updated["notes"] = notes
         return updated
@@ -367,6 +367,43 @@ def summary(provider: str | None = None) -> dict[str, Any]:
         "error_count": len(errored),
         "error_rate_pct": error_rate_pct,
     }
+
+
+def _from_dynamo_value(value: Any) -> Any:
+    """Recursively convert DynamoDB's `Decimal` back into native `int`/`float`.
+
+    English: The inverse of `_to_dynamo_value`. Every read from DynamoDB
+    (`scan`, `get_item`) returns `Decimal` in place of the `float`s that
+    were written, and `Decimal` is not an instance of `float` — code
+    written assuming native numbers breaks in two ways otherwise: (1)
+    `summary()`'s `isinstance(x, (int, float))` filters silently drop every
+    Decimal value, making every average look like "no data" even though
+    real runs exist; (2) FastAPI's JSON encoder serializes `Decimal` as a
+    *string* (not a JSON number), so frontend code calling `.toFixed()` on
+    fields like `run.latency_ms` throws. Converting back to native types
+    right after reading fixes both without touching `summary()` or the
+    frontend. Whole-number Decimals (e.g. `Decimal("54")`) become `int` so
+    integer fields like token counts don't turn into `54.0`.
+    中文: `_to_dynamo_value` 的反向操作。每次從 DynamoDB 讀取（`scan`、
+    `get_item`）都會把寫入時的 `float` 讀回成 `Decimal`，而 `Decimal` 並不是
+    `float` 的實例——若程式碼假設拿到的是原生數字型別，會造成兩個問題：(1)
+    `summary()` 的 `isinstance(x, (int, float))` 過濾條件會悄悄濾掉所有
+    Decimal 值，導致即使有真實執行紀錄，平均值也顯示「尚無資料」；(2)
+    FastAPI 的 JSON encoder 會把 `Decimal` 序列化成「字串」而非 JSON 數字，
+    導致前端對 `run.latency_ms` 之類欄位呼叫 `.toFixed()` 時出錯。讀取後立即
+    轉回原生型別可以同時修好這兩個問題，不需要改動 `summary()` 或前端。整數
+    值的 Decimal（例如 `Decimal("54")`）會轉成 `int`，避免像 token 數這類整數
+    欄位變成 `54.0`。
+    """
+
+    if isinstance(value, Decimal):
+        as_int = int(value)
+        return as_int if as_int == value else float(value)
+    if isinstance(value, dict):
+        return {k: _from_dynamo_value(v) for k, v in value.items()}
+    if isinstance(value, list):
+        return [_from_dynamo_value(v) for v in value]
+    return value
 
 
 def _to_dynamo_value(value: Any) -> Any:
