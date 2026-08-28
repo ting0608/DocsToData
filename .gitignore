@@ -3,7 +3,9 @@
 __pycache__/
 *.pyc
 .env
-data/
+# Anchor to repo root so this only ignores ./data (local uploads + FAISS
+# indexes) and NOT frontend/data, which holds committed guest sample data.
+/data/
 
 # Ignore any file/folder name containing "[private]"
 **/*[[]private[]]*

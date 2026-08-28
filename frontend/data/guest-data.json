@@ -1,0 +1,150 @@
+{
+  "_comment": "Hardcoded, non-usable demo data shown in guest-preview mode only. Never touches the backend. Numbers/text are illustrative samples.",
+  "documents": [
+    { "source": "Sample Proposal - Phase 4.pdf", "pages": 11, "chunks": 11 },
+    { "source": "Quotation 2512_001 (Demo).pdf", "pages": 1, "chunks": 1 },
+    { "source": "Quotation 2512_002 (Demo).pdf", "pages": 1, "chunks": 1 },
+    { "source": "5-Star Features Overview.pdf", "pages": 3, "chunks": 4 },
+    { "source": "Statement of Requirements.pdf", "pages": 6, "chunks": 6 }
+  ],
+  "ragChat": [
+    { "type": "system", "text": "Guest preview: this is sample data. Sign in to upload your own PDFs and ask real questions." },
+    { "type": "user", "text": "What is the total budget for the Phase 4 proposal?" },
+    { "type": "bot", "text": "The total cost for the Phase 4 proposal is MYR 291,600, which includes an 8% SST of MYR 21,600. This is illustrative sample data. [qa]" },
+    { "type": "user", "text": "Summarize the Bitrise quotation." },
+    { "type": "bot", "text": "The Bitrise quotation (ref 2512/001) covers a 12-month CI/CD subscription at MYR 585/month, totalling MYR 7,581.60 incl. SST. Sample data for preview only. [summarize]" }
+  ],
+  "evaluation": {
+    "summary": {
+      "total_runs": 12,
+      "graded_runs": 9,
+      "ungraded_runs": 3,
+      "pass_count": 8,
+      "fail_count": 1,
+      "pass_rate_pct": 88.9,
+      "avg_recall_at_k": 0.82,
+      "avg_precision_at_k": 0.76,
+      "avg_mrr": 0.91,
+      "retrieval_scored_runs": 6,
+      "avg_faithfulness": 0.95,
+      "avg_relevance": 0.93,
+      "avg_groundedness": 0.9,
+      "avg_correctness": 0.87,
+      "avg_citation_accuracy": 0.92,
+      "avg_hallucination_rate": 0.04,
+      "judge_scored_runs": 10,
+      "avg_latency_ms": 3820.5,
+      "avg_cost_usd": 0.00021,
+      "cost_known_runs": 10,
+      "error_count": 0,
+      "error_rate_pct": 0.0
+    },
+    "cases": [
+      {
+        "id": "guest-case-1",
+        "provider": "openai",
+        "question": "What is the total budget for the Phase 4 proposal?",
+        "expected_answer": "MYR 291,600 including 8% SST",
+        "source_filter": null,
+        "ground_truth": [{ "document": "Sample Proposal - Phase 4.pdf", "page": 1 }],
+        "created_at": "2026-08-20T02:15:00.000000+00:00"
+      },
+      {
+        "id": "guest-case-2",
+        "provider": "openai",
+        "question": "How long is the Bitrise subscription valid?",
+        "expected_answer": "12 months (Jan 2026 - Dec 2026)",
+        "source_filter": null,
+        "ground_truth": null,
+        "created_at": "2026-08-21T06:40:00.000000+00:00"
+      }
+    ],
+    "history": [
+      {
+        "id": "guest-run-1",
+        "case_id": "guest-case-1",
+        "provider": "openai",
+        "question": "What is the total budget for the Phase 4 proposal?",
+        "answer": "The total cost is MYR 291,600, which includes an 8% SST of MYR 21,600. (sample answer)",
+        "expected_answer": "MYR 291,600 including 8% SST",
+        "intent": "qa",
+        "sources": ["Sample Proposal - Phase 4.pdf"],
+        "citations": [
+          { "document": "Sample Proposal - Phase 4.pdf", "page": 1, "chunk_id": "sample-p0001-c0001", "score": 0.61 }
+        ],
+        "retrieval_metrics": { "k": 5, "recall_at_k": 1.0, "precision_at_k": 0.2, "mrr": 1.0 },
+        "judge_scores": {
+          "faithfulness": 1.0,
+          "relevance": 1.0,
+          "groundedness": 1.0,
+          "correctness": 0.95,
+          "citation_accuracy": 1.0,
+          "hallucination_rate": 0.0,
+          "reasoning": "Sample judge output for preview.",
+          "judge_error": null
+        },
+        "cost_usd": 0.00026,
+        "prompt_tokens": 1576,
+        "completion_tokens": 43,
+        "latency_ms": 3457.4,
+        "error": null,
+        "rating": "pass",
+        "notes": null,
+        "created_at": "2026-08-24T09:12:00.000000+00:00"
+      },
+      {
+        "id": "guest-run-2",
+        "case_id": "guest-case-2",
+        "provider": "openai",
+        "question": "How long is the Bitrise subscription valid?",
+        "answer": "The Bitrise subscription runs for 12 months, from January 2026 to December 2026. (sample answer)",
+        "expected_answer": "12 months (Jan 2026 - Dec 2026)",
+        "intent": "qa",
+        "sources": ["Quotation 2512_001 (Demo).pdf"],
+        "citations": [
+          { "document": "Quotation 2512_001 (Demo).pdf", "page": 1, "chunk_id": "sample-q1-p0001-c0001", "score": 0.58 }
+        ],
+        "retrieval_metrics": null,
+        "judge_scores": {
+          "faithfulness": 0.9,
+          "relevance": 1.0,
+          "groundedness": 0.85,
+          "correctness": null,
+          "citation_accuracy": 0.9,
+          "hallucination_rate": 0.05,
+          "reasoning": "Sample judge output for preview.",
+          "judge_error": null
+        },
+        "cost_usd": 0.00012,
+        "prompt_tokens": 455,
+        "completion_tokens": 38,
+        "latency_ms": 2980.1,
+        "error": null,
+        "rating": "pass",
+        "notes": null,
+        "created_at": "2026-08-24T09:20:00.000000+00:00"
+      },
+      {
+        "id": "guest-run-3",
+        "case_id": null,
+        "provider": "openai",
+        "question": "List the deliverables for the 5-star feature set.",
+        "answer": "Deliverables include UI/UX prototypes, frontend build, staging deployment, and app store release. (sample answer)",
+        "expected_answer": null,
+        "intent": "qa",
+        "sources": ["5-Star Features Overview.pdf"],
+        "citations": [],
+        "retrieval_metrics": null,
+        "judge_scores": null,
+        "cost_usd": 0.00019,
+        "prompt_tokens": 820,
+        "completion_tokens": 61,
+        "latency_ms": 4102.7,
+        "error": null,
+        "rating": null,
+        "notes": null,
+        "created_at": "2026-08-25T01:05:00.000000+00:00"
+      }
+    ]
+  }
+}
