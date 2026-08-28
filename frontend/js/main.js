@@ -4,7 +4,7 @@ import { activateEvaluation, initEvaluation } from "./evaluation.js";
 import { initAuthView, refreshAuthUi } from "./authView.js";
 import { activateLibrary, initLibrary } from "./library.js";
 import { goToView, initNav, onViewChange } from "./nav.js";
-import { initUploadRag } from "./uploadRag.js";
+import { activateUploadRag, initUploadRag } from "./uploadRag.js";
 
 async function bootstrap() {
   // Auth must initialize first: it consumes the Cognito redirect (?code=...)
@@ -17,6 +17,7 @@ async function bootstrap() {
   initNav("rag");
 
   onViewChange((viewName) => {
+    if (viewName === "rag") activateUploadRag();
     if (viewName === "library") activateLibrary();
     if (viewName === "evaluation") activateEvaluation();
     if (viewName === "auth") refreshAuthUi();

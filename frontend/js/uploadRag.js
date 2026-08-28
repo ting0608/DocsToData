@@ -566,6 +566,34 @@ export function initUploadRag() {
 }
 
 /**
+ * Re-fetch the document list when the Upload & RAG tab becomes active.
+ *
+ * English: This view is the default landing tab, so its first document
+ * fetch (above, in initUploadRag) runs during app bootstrap -- often before
+ * the user has actually finished logging in, meaning it fails with 401 and
+ * is silently swallowed. Unlike Document Library/Evaluation (which only
+ * ever fetch lazily via this same "activate on nav" pattern, so they always
+ * run post-login), nothing re-triggered RAG's fetch after a successful
+ * sign-in. Wiring this to onViewChange("rag") in main.js means navigating
+ * back into this tab -- which is exactly what happens right after logging
+ * in from the Account tab -- retries with a now-valid token, instead of
+ * requiring a full page refresh.
+ * 中文: 這個畫面是預設進入的頁籤，所以上面 initUploadRag 裡的第一次文件請求
+ * 會在 app 啟動時就執行——往往在使用者真正完成登入之前，因此會以 401 失敗，
+ * 而且被靜默吞掉。不像 Document Library/Evaluation（它們只透過同一種「進入
+ * 頁籤時才載入」的模式延遲請求，所以一定是登入後才執行），先前沒有任何機制
+ * 會在登入成功後重新觸發 RAG 的請求。在 main.js 把這個函式接到
+ * onViewChange("rag")，代表切回這個頁籤時（登入後從 Account 頁籤切回來正是
+ * 這個情境）會用此時已經有效的 token 重新嘗試，而不需要整頁重新整理。
+ */
+export function activateUploadRag() {
+  refreshDocuments().catch((err) => {
+    if (err instanceof ApiError && err.status === 401) return; // handled by auth guard
+    addMessage("system", `Error loading documents: ${err.message}`);
+  });
+}
+
+/**
  * Wipe the chat transcript, any open report, and all cached document
  * selection state on sign-out so nothing from the previous session leaks
  * into the next one.
