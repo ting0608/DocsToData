@@ -1,4 +1,23 @@
 Go Invoice - Change Log
+========================================================================
+
+Repo cleanup + docs refresh
+---------------------------
+- Removed accidental empty files committed at repo root: config,
+  agent.mode, autonomous, set (all 0 bytes, unreferenced).
+- Removed orphaned string/ directory (stale FAISS index not used by any
+  code; real indexes live under data/index and data/index_local).
+- Refreshed docs/README.md "Project structure" to match the current
+  layout: backend/ (added lambda_handler.py, runtime_paths.py), the three
+  rag*/ provider pipelines, full frontend/js module list, guest-preview
+  mode, and the AWS Lambda + Amplify deployment path. Documented the
+  eval-store JSON-vs-DynamoDB backend switch (EVAL_STORE_BACKEND).
+- Decision: config/Docker/SAM/Amplify files kept at repo root (build
+  tooling — Docker COPY, SAM CodeUri, Amplify build context — expects
+  them there; moving them adds churn without benefit).
+
+========================================================================
+
 UI Revamp + Navigation + AWS Cognito Authentication
 ========================================================================
 

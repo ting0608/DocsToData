@@ -137,14 +137,53 @@ Then open `http://localhost:8080/`.
 
 ## Project structure
 
-- `rag/pdf_parser.py`: extracts page text from PDF via PyMuPDF
-- `rag/chunking.py`: token-aware chunking with overlap
-- `rag/pipeline.py`: OpenAI embedding + retrieval + answer flow
-- `rag/vector_store.py`: FAISS index and metadata persistence
-- `rag/cli.py`: CLI interface for ingest/query
-- `rag_local/pipeline.py`: Ollama embedding + retrieval + answer flow
-- `rag_local/cli.py`: local CLI interface for ingest/query
-- `backend/app.py`: FastAPI app — RAG, Document Library, and Evaluation routes
-- `backend/auth.py`: Cognito JWT verification (falls back to open dev mode)
-- `backend/eval_store.py`: JSON-file persistence for evaluation cases/history
-- `frontend/index.html` + `frontend/js/*.js`: nav-based SPA (Upload & RAG, Evaluation Dashboard, Document Library, Account) — plain ES modules, no build step
+Top-level layout:
+
+```
+.
+├── backend/            FastAPI app + AWS Lambda handler
+├── rag/                OpenAI RAG pipeline (default provider)
+├── rag_local/          Ollama RAG pipeline (local provider)
+├── rag_aws/            Bedrock RAG pipeline (AWS provider)
+├── frontend/           Static SPA (no build step)
+├── data/               Local uploads + FAISS indexes (gitignored)
+├── docs/               README, changelog, architecture notes
+├── Dockerfile          Cloud Run / local uvicorn image
+├── Dockerfile.lambda   AWS Lambda container image
+├── docker-compose.yml  Local dev (mounts data/, points Ollama at host)
+├── template.yaml       AWS SAM stack (Lambda + API Gateway + S3 + DynamoDB + Cognito)
+├── samconfig.toml      SAM deploy defaults (no secrets)
+├── amplify.yml         Amplify Hosting build spec for the frontend
+├── requirements.txt          Runtime deps
+└── requirements-lambda.txt   Extra deps only needed on Lambda
+```
+
+Backend (`backend/`):
+- `app.py`: FastAPI app — RAG, Document Library, Evaluation, and auth routes
+- `auth.py`: Cognito JWT verification + email/password auth (falls back to open dev mode)
+- `eval_store.py`: evaluation persistence — JSON files locally (`EVAL_STORE_BACKEND=json`, default) or DynamoDB on Lambda (`EVAL_STORE_BACKEND=dynamodb`)
+- `lambda_handler.py`: AWS Lambda entrypoint wrapping the FastAPI app
+- `runtime_paths.py`: resolves writable paths (local disk vs Lambda `/tmp`)
+
+RAG pipelines (one per provider, same interface):
+- `rag/`: OpenAI embedding + retrieval + answer flow. Key modules: `pdf_parser.py` (PyMuPDF text extraction), `chunking.py` (token-aware chunking), `retrieval.py`, `vector_store.py` (FAISS + metadata), `evaluation.py` (retrieval/judge metrics), `pricing.py` (cost estimates), `pipeline.py`, `cli.py`.
+- `rag_local/`: Ollama pipeline + CLI (local, no API key).
+- `rag_aws/`: Bedrock pipeline (AWS cloud provider).
+
+Frontend (`frontend/`, plain ES modules, no build step):
+- `index.html`, `styles.css`: nav-based SPA shell (Upload & RAG, Evaluation Dashboard, Document Library, Account).
+- `js/`: `main.js` (bootstrap/nav wiring), `api.js` (fetch + token refresh), `auth.js` + `authView.js` (Cognito flows), `guest.js` (guest-preview mode), `uploadRag.js`, `library.js`, `evaluation.js`, `state.js`, `nav.js`, `toast.js`, `config.js`.
+- `assets/`: logo + provider icons. `data/guest-data.json`: hardcoded sample data shown in guest-preview mode.
+
+### Guest preview mode
+
+The Account screen offers a **Continue as guest** button that bypasses login and populates every screen with hardcoded sample data from `frontend/data/guest-data.json`. In guest mode the app makes no backend calls and every mutating action (upload, query, run evaluation, save/delete/grade) is disabled with a prompt to sign in. Guest state is not persisted — a page refresh returns to the real login screen.
+
+### AWS deployment (Lambda + Amplify)
+
+The backend also deploys as a container-image Lambda behind an HTTP API via AWS SAM (`template.yaml`), with S3 for uploads/index sync, DynamoDB for the evaluation store, and an optional Cognito user pool. The frontend deploys separately to Amplify Hosting (`amplify.yml`), which injects the API Gateway URL into `frontend/js/config.js` at build time via the `API_BASE_URL` environment variable. Build/deploy:
+
+```bash
+sam build
+sam deploy --parameter-overrides OpenAiApiKey=sk-... BudgetAlertEmail=you@example.com
+```
