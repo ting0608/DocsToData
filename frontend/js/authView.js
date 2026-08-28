@@ -14,6 +14,7 @@ import {
   signUp,
 } from "./auth.js";
 import { clearEvaluation } from "./evaluation.js";
+import { enterGuestMode, exitGuestMode, isGuest } from "./guest.js";
 import { clearLibrary } from "./library.js";
 import { goToView } from "./nav.js";
 import { showToast } from "./toast.js";
@@ -57,6 +58,10 @@ const resendCodeBtn = document.getElementById("resendCodeBtn");
 
 const showSignupBtn = document.getElementById("showSignupBtn");
 const showLoginBtn = document.getElementById("showLoginBtn");
+
+const continueGuestBtn = document.getElementById("continueGuestBtn");
+const guestBanner = document.getElementById("guestBanner");
+const guestSignInBtn = document.getElementById("guestSignInBtn");
 
 // Email pending confirmation, set right after a successful sign-up.
 let pendingConfirmEmail = null;
@@ -104,7 +109,35 @@ function renderSignedIn(user) {
   userAvatar.textContent = initials(displayName);
 }
 
+function renderGuest() {
+  // Signed-in-looking UI, but clearly labelled as a guest preview.
+  devModePanel.classList.add("hidden");
+  loggedOutPanel.classList.add("hidden");
+  loggedInPanel.classList.remove("hidden");
+  topbarSignInBtn.classList.add("hidden");
+
+  authUserName.textContent = "Guest";
+  authUserEmail.textContent = "Viewing sample data — nothing is saved";
+  authUserSub.textContent = "";
+  authUserAvatar.textContent = "G";
+
+  userBadge.classList.remove("hidden");
+  userName.textContent = "Guest";
+  userAvatar.textContent = "G";
+
+  // Guest "sign out" button should read as "Exit guest" and the sign-out
+  // handler already exits guest mode, so just relabel it.
+  signOutBtn.textContent = "Exit guest preview";
+
+  guestBanner.classList.remove("hidden");
+}
+
 export async function refreshAuthUi() {
+  if (isGuest()) {
+    renderGuest();
+    return;
+  }
+
   let cfg;
   let user = null;
   try {
@@ -115,6 +148,9 @@ export async function refreshAuthUi() {
     // leaving both panels visible (half-rendered state).
     cfg = cfg || { enabled: true, sso_provider: null };
   }
+
+  guestBanner.classList.add("hidden");
+  signOutBtn.textContent = "Sign out";
 
   if (cfg && !cfg.enabled) {
     // Dev mode: backend accepts every request, so treat the app as "signed in".
@@ -201,21 +237,53 @@ export async function initAuthView() {
   showSignupBtn.addEventListener("click", () => showAuthSubForm("signup"));
   showLoginBtn.addEventListener("click", () => showAuthSubForm("login"));
 
+  continueGuestBtn.addEventListener("click", async () => {
+    try {
+      await enterGuestMode();
+      await refreshAuthUi();
+      // Land on the first feature screen; nav-to fires activateUploadRag(),
+      // which now renders the guest sample data.
+      goToView("rag");
+      showToast("Browsing as guest — sample data only.", "info");
+    } catch (err) {
+      showToast(err.message || "Couldn't start guest preview", "error");
+    }
+  });
+
+  const exitGuest = () => {
+    exitGuestMode();
+    clearUploadRag();
+    clearLibrary();
+    clearEvaluation();
+    guestBanner.classList.add("hidden");
+    signOutBtn.textContent = "Sign out";
+    goToView("auth");
+    refreshAuthUi();
+  };
+  guestSignInBtn.addEventListener("click", exitGuest);
+
   signInSsoBtn.addEventListener("click", async () => {
     const cfg = await fetchAuthConfig();
     signIn({ identityProvider: cfg.sso_provider }).catch((err) => showToast(err.message, "error"));
   });
 
-  const doSignOut = () =>
-    signOutPassword()
-      .then(() => {
-        // Wipe every view's rendered data + cached state so the next user
-        // (or the signed-out screen) never shows the previous session's data.
-        clearUploadRag();
-        clearLibrary();
-        clearEvaluation();
-      })
-      .then(() => refreshAuthUi());
+  const doSignOut = async () => {
+    // In guest mode there's no real session to invalidate -- just drop guest
+    // state. Otherwise perform the real Cognito sign-out.
+    if (isGuest()) {
+      exitGuestMode();
+    } else {
+      await signOutPassword();
+    }
+    // Wipe every view's rendered data + cached state so the next user
+    // (or the signed-out screen) never shows the previous session's data.
+    clearUploadRag();
+    clearLibrary();
+    clearEvaluation();
+    guestBanner.classList.add("hidden");
+    signOutBtn.textContent = "Sign out";
+    await refreshAuthUi();
+  };
   signOutBtn.addEventListener("click", doSignOut);
   topbarSignOutBtn.addEventListener("click", doSignOut);
   topbarSignInBtn.addEventListener("click", () => goToView("auth"));

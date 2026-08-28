@@ -2,6 +2,7 @@
 // counts, delete a document, and jump into the upload flow.
 
 import { api } from "./api.js";
+import { blockIfGuest, getGuestData, isGuest } from "./guest.js";
 import { currentProvider, onProviderChange } from "./state.js";
 import { showToast } from "./toast.js";
 
@@ -78,6 +79,7 @@ function renderDocuments(docs) {
 }
 
 async function deleteDocument(source, card) {
+  if (blockIfGuest("Sign in to manage documents. You're viewing sample data as a guest.")) return;
   if (!window.confirm(`Delete "${source}" from the index? This removes all its chunks.`)) {
     return;
   }
@@ -93,6 +95,11 @@ async function deleteDocument(source, card) {
 }
 
 export async function loadDocuments() {
+  // Guest preview: render the bundled sample documents, no backend call.
+  if (isGuest()) {
+    renderDocuments((getGuestData()?.documents) || []);
+    return;
+  }
   renderSkeleton();
   try {
     const data = await api.get(`/documents/details?provider=${encodeURIComponent(currentProvider())}`);
@@ -106,6 +113,7 @@ export async function loadDocuments() {
 
 export function initLibrary() {
   const goToUpload = () => {
+    if (blockIfGuest("Sign in to upload PDFs. You're viewing sample data as a guest.")) return;
     document.querySelector('.nav-link[data-view="rag"]')?.click();
     window.setTimeout(() => fileInput?.click(), 260);
   };

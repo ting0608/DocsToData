@@ -2,6 +2,7 @@
 // RAG pipeline, grade the answers pass/fail, and track aggregate metrics.
 
 import { api } from "./api.js";
+import { blockIfGuest, getGuestData, isGuest } from "./guest.js";
 import { currentProvider, onProviderChange } from "./state.js";
 import { showToast } from "./toast.js";
 
@@ -198,7 +199,9 @@ function formatCost(value) {
 
 async function loadSummary() {
   try {
-    const data = await api.get(`/evaluate/summary?provider=${encodeURIComponent(currentProvider())}`);
+    const data = isGuest()
+      ? { summary: getGuestData()?.evaluation?.summary }
+      : await api.get(`/evaluate/summary?provider=${encodeURIComponent(currentProvider())}`);
     const s = data.summary;
     latestSummary = s;
 
@@ -354,6 +357,7 @@ function renderCases(cases) {
     delBtn.type = "button";
     delBtn.textContent = "Delete";
     delBtn.addEventListener("click", async () => {
+      if (blockIfGuest("Sign in to manage test cases. You're viewing sample data as a guest.")) return;
       try {
         await api.del(`/evaluate/cases/${c.id}`);
         await loadCases();
@@ -373,7 +377,9 @@ function renderCases(cases) {
 
 async function loadCases() {
   try {
-    const data = await api.get(`/evaluate/cases?provider=${encodeURIComponent(currentProvider())}`);
+    const data = isGuest()
+      ? { cases: getGuestData()?.evaluation?.cases || [] }
+      : await api.get(`/evaluate/cases?provider=${encodeURIComponent(currentProvider())}`);
     renderCases(data.cases || []);
   } catch (err) {
     showToast(err.message || "Failed to load test cases", "error");
@@ -495,7 +501,9 @@ function metricChip(text) {
 
 async function loadHistory({ resetPage = false } = {}) {
   try {
-    const data = await api.get(`/evaluate/history?provider=${encodeURIComponent(currentProvider())}`);
+    const data = isGuest()
+      ? { history: getGuestData()?.evaluation?.history || [] }
+      : await api.get(`/evaluate/history?provider=${encodeURIComponent(currentProvider())}`);
     fullHistory = data.history || [];
     if (resetPage) historyPage = 1;
     renderHistoryPage();
@@ -505,6 +513,7 @@ async function loadHistory({ resetPage = false } = {}) {
 }
 
 async function rate(runId, rating) {
+  if (blockIfGuest("Sign in to grade runs. You're viewing sample data as a guest.")) return;
   try {
     await api.post(`/evaluate/history/${runId}/rate`, { rating });
     await Promise.all([loadHistory({ resetPage: false }), loadSummary()]);
@@ -514,6 +523,7 @@ async function rate(runId, rating) {
 }
 
 async function runEvaluation(question, testCase = null) {
+  if (blockIfGuest("Sign in to run evaluations. You're viewing sample data as a guest.")) return;
   runBtn.disabled = true;
   runBtn.innerHTML = '<span class="spinner"></span> Running...';
   runResultEl.classList.add("hidden");
@@ -553,6 +563,7 @@ export function initEvaluation() {
 
   caseForm.addEventListener("submit", async (e) => {
     e.preventDefault();
+    if (blockIfGuest("Sign in to save test cases. You're viewing sample data as a guest.")) return;
     const question = caseQuestionInput.value.trim();
     if (!question) return;
     const gtDoc = caseGroundTruthDocInput.value.trim();

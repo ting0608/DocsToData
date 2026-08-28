@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Go Invoice</title>
     <link rel="icon" type="image/png" href="/frontend/assets/logo.png" />
-    <link rel="stylesheet" href="/frontend/styles.css?v=5" />
+    <link rel="stylesheet" href="/frontend/styles.css?v=6" />
   </head>
   <body>
     <header class="topbar">
@@ -35,6 +35,11 @@
         <button id="topbarSignInBtn" class="btn btn-primary btn-sm hidden" type="button">Sign in</button>
       </div>
     </header>
+
+    <div id="guestBanner" class="guest-banner hidden">
+      <span>You're browsing as a guest — this is sample data and actions are disabled.</span>
+      <button id="guestSignInBtn" class="btn btn-primary btn-sm" type="button">Sign in</button>
+    </div>
 
     <main class="views" id="views">
       <!-- Upload & RAG -->
@@ -259,6 +264,9 @@
               <div class="auth-actions">
                 <button id="signInSsoBtn" class="btn btn-secondary hidden" type="button">Continue with SSO</button>
               </div>
+              <div class="auth-divider"><span>or</span></div>
+              <button id="continueGuestBtn" class="btn btn-ghost btn-block" type="button">Continue as guest</button>
+              <p class="auth-guest-hint">Preview all screens with sample data. No sign-in, nothing is saved.</p>
             </div>
 
             <!-- Sign up -->

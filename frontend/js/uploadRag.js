@@ -6,6 +6,7 @@
 import { api, ApiError } from "./api.js";
 import { getAccessToken } from "./auth.js";
 import { API_BASE_URL } from "./config.js";
+import { blockIfGuest, getGuestData, isGuest } from "./guest.js";
 import { currentProvider, onProviderChange } from "./state.js";
 import { showToast } from "./toast.js";
 
@@ -251,7 +252,13 @@ function setAllDocumentSelection(checked) {
 }
 
 export async function refreshDocuments() {
-  const data = await api.get(`/documents?provider=${encodeURIComponent(providerEl.value)}`);
+  // Guest preview: source the document list from the bundled sample data
+  // instead of the backend, and select all of them so Ask/Summarize would be
+  // "available" in the UI (though actually running them is blocked).
+  const guestData = isGuest() ? getGuestData() : null;
+  const data = guestData
+    ? { documents: (guestData.documents || []).map((d) => d.source) }
+    : await api.get(`/documents?provider=${encodeURIComponent(providerEl.value)}`);
   const docs = data.documents || [];
   const provider = currentProvider();
   const prevKnown = knownDocumentsByProvider[provider] || [];
@@ -481,7 +488,10 @@ async function runSummarizeReport() {
 }
 
 export function initUploadRag() {
-  uploadBtn.addEventListener("click", () => fileInput.click());
+  uploadBtn.addEventListener("click", () => {
+    if (blockIfGuest("Sign in to upload PDFs. You're viewing sample data as a guest.")) return;
+    fileInput.click();
+  });
 
   fileInput.addEventListener("change", async () => {
     const files = fileInput.files;
@@ -497,6 +507,7 @@ export function initUploadRag() {
   });
 
   sendBtn.addEventListener("click", async () => {
+    if (blockIfGuest("Sign in to ask questions. You're viewing sample data as a guest.")) return;
     const question = questionInput.value.trim();
     if (!question) return;
     if (!ensureDocumentsSelected("ask a question")) return;
@@ -515,6 +526,7 @@ export function initUploadRag() {
   });
 
   summarizeBtn.addEventListener("click", async () => {
+    if (blockIfGuest("Sign in to generate reports. You're viewing sample data as a guest.")) return;
     try {
       await runSummarizeReport();
     } catch (err) {
@@ -587,10 +599,25 @@ export function initUploadRag() {
  * 這個情境）會用此時已經有效的 token 重新嘗試，而不需要整頁重新整理。
  */
 export function activateUploadRag() {
+  if (isGuest()) {
+    renderGuestChat();
+    refreshDocuments().catch(() => {});
+    return;
+  }
   refreshDocuments().catch((err) => {
     if (err instanceof ApiError && err.status === 401) return; // handled by auth guard
     addMessage("system", `Error loading documents: ${err.message}`);
   });
+}
+
+// Render the hardcoded sample chat transcript once (idempotent per activation).
+function renderGuestChat() {
+  const data = getGuestData();
+  messagesEl.replaceChildren();
+  const chat = (data && data.ragChat) || [];
+  for (const msg of chat) {
+    addMessage(msg.type, msg.text);
+  }
 }
 
 /**
