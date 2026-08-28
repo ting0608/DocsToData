@@ -746,7 +746,10 @@ select:focus,
 }
 
 .hidden {
-  display: none;
+  /* Utility class must win over component rules like `.auth-card`
+     (display: flex) that are defined later in this file and would
+     otherwise override a plain `display: none` at equal specificity. */
+  display: none !important;
 }
 
 .report-modal,
@@ -1230,6 +1233,49 @@ select:focus,
   font-size: 19px;
 }
 
+/* Metric explanation tooltip: a single shared element positioned under the
+   hovered metric card by evaluation.js. Marked with a hover affordance so
+   users know the cards are interactive. */
+.eval-score-grid .summary-card[data-metric],
+.eval-metric-group .summary-card[data-metric] {
+  cursor: help;
+  transition:
+    transform var(--duration-fast) var(--ease-standard),
+    box-shadow var(--duration-base) var(--ease-standard);
+}
+
+.eval-score-grid .summary-card[data-metric]:hover,
+.eval-metric-group .summary-card[data-metric]:hover {
+  transform: translateY(-2px);
+  box-shadow: 0 4px 14px rgba(17, 63, 54, 0.12);
+}
+
+.metric-tooltip {
+  position: fixed;
+  z-index: 60;
+  max-width: 320px;
+  padding: 12px 14px;
+  background: var(--color-primary-darker, #113f36);
+  color: #fff;
+  border-radius: var(--radius-sm);
+  box-shadow: 0 8px 24px rgba(17, 63, 54, 0.28);
+  pointer-events: none;
+  animation: fade-in var(--duration-fast) var(--ease-standard);
+}
+
+.metric-tooltip-title {
+  font-weight: 700;
+  font-size: 13px;
+  margin: 0 0 6px;
+}
+
+.metric-tooltip-body {
+  font-size: 12px;
+  line-height: 1.5;
+  margin: 0;
+  color: rgba(255, 255, 255, 0.9);
+}
+
 .eval-score-grid .metric-retrieval {
   border-left-color: #2fa084;
 }
@@ -1419,6 +1465,27 @@ select:focus,
   font-weight: 600;
   font-size: 16px;
   color: var(--color-text);
+}
+
+.auth-switch {
+  font-size: 13px;
+  color: var(--color-text-muted);
+  margin-top: 4px;
+}
+
+.link-btn {
+  border: none;
+  background: none;
+  padding: 0;
+  color: var(--color-primary);
+  font-size: 13px;
+  font-weight: 500;
+  cursor: pointer;
+  text-decoration: underline;
+}
+
+.link-btn:hover {
+  color: var(--color-primary-dark);
 }
 
 .auth-profile-email,

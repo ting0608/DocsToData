@@ -7,14 +7,23 @@ import shutil
 
 from typing import Any, Literal
 
-from fastapi import Depends, FastAPI, File, Form, HTTPException, UploadFile
+from fastapi import Depends, FastAPI, File, Form, Header, HTTPException, UploadFile
 from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import FileResponse
 from fastapi.staticfiles import StaticFiles
 from pydantic import BaseModel, Field
 
 from backend import eval_store
-from backend.auth import auth_public_config, get_current_user
+from backend.auth import (
+    auth_public_config,
+    confirm_sign_up,
+    get_current_user,
+    refresh_tokens,
+    resend_confirmation_code,
+    sign_in,
+    sign_out,
+    sign_up,
+)
 from backend.runtime_paths import app_data_dir, is_lambda
 from rag.evaluation import compute_retrieval_metrics, judge_generation
 from rag.pipeline import RagPipeline
@@ -312,6 +321,85 @@ def auth_me(user: dict[str, Any] = Depends(get_current_user)) -> dict[str, objec
     """Return the identity resolved from the caller's bearer token."""
 
     return {"status": "ok", "user": user}
+
+
+class LoginRequest(BaseModel):
+    email: str
+    password: str
+
+
+class RefreshRequest(BaseModel):
+    refresh_token: str
+
+
+class SignupRequest(BaseModel):
+    email: str
+    password: str
+
+
+class ConfirmSignupRequest(BaseModel):
+    email: str
+    code: str
+
+
+class ResendCodeRequest(BaseModel):
+    email: str
+
+
+@app.post("/auth/login")
+def auth_login(req: LoginRequest) -> dict[str, object]:
+    """Classic username/password sign-in. Returns Cognito access/id/refresh tokens.
+
+    English: This is the in-app login form's endpoint (as opposed to the
+    Hosted UI redirect used for SSO). The password never leaves this
+    request; it is forwarded to Cognito's InitiateAuth over TLS and never
+    logged or stored.
+    """
+
+    tokens = sign_in(req.email, req.password)
+    return {"status": "ok", "tokens": tokens}
+
+
+@app.post("/auth/refresh")
+def auth_refresh(req: RefreshRequest) -> dict[str, object]:
+    """Exchange a refresh token for a new access/id token pair."""
+
+    tokens = refresh_tokens(req.refresh_token)
+    return {"status": "ok", "tokens": tokens}
+
+
+@app.post("/auth/signup")
+def auth_signup(req: SignupRequest) -> dict[str, object]:
+    """Register a new account. Cognito emails a confirmation code to `email`."""
+
+    result = sign_up(req.email, req.password)
+    return {"status": "ok", **result}
+
+
+@app.post("/auth/confirm-signup")
+def auth_confirm_signup(req: ConfirmSignupRequest) -> dict[str, object]:
+    """Confirm a new account using the emailed verification code."""
+
+    confirm_sign_up(req.email, req.code)
+    return {"status": "ok"}
+
+
+@app.post("/auth/resend-code")
+def auth_resend_code(req: ResendCodeRequest) -> dict[str, object]:
+    """Re-send the sign-up confirmation code."""
+
+    resend_confirmation_code(req.email)
+    return {"status": "ok"}
+
+
+@app.post("/auth/logout")
+def auth_logout(authorization: str | None = Header(default=None)) -> dict[str, object]:
+    """Invalidate all refresh tokens for the caller (global sign-out)."""
+
+    if not authorization or not authorization.lower().startswith("bearer "):
+        raise HTTPException(status_code=401, detail="Missing bearer token")
+    sign_out(authorization.split(" ", 1)[1].strip())
+    return {"status": "ok"}
 
 
 @app.post("/ingest")

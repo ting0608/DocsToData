@@ -121,3 +121,11 @@ export function activateLibrary() {
   loaded = true;
   loadDocuments();
 }
+
+/** Wipe rendered documents + cached state on sign-out. */
+export function clearLibrary() {
+  loaded = false;
+  grid.replaceChildren();
+  countEl.textContent = "0 documents";
+  emptyEl.classList.add("hidden");
+}

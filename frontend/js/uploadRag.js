@@ -564,3 +564,25 @@ export function initUploadRag() {
     if (err instanceof ApiError && err.status === 401) return; // handled by auth guard
   });
 }
+
+/**
+ * Wipe the chat transcript, any open report, and all cached document
+ * selection state on sign-out so nothing from the previous session leaks
+ * into the next one.
+ */
+export function clearUploadRag() {
+  messagesEl.replaceChildren();
+  latestReportText = "";
+  reportContent.textContent = "";
+  reportOverlay.classList.add("hidden");
+  documentsOverlay.classList.add("hidden");
+  documentsList.replaceChildren();
+
+  allDocuments.length = 0;
+  selectedSources.clear();
+  knownDocumentsByProvider.openai = [];
+  knownDocumentsByProvider.ollama = [];
+  selectedSourcesByProvider.openai = new Set();
+  selectedSourcesByProvider.ollama = new Set();
+  updateDocumentsBtnLabel();
+}

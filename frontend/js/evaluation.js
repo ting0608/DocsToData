@@ -46,6 +46,119 @@ const scoreGridGraphEl = document.getElementById("evalScoreGridGraph");
 const chartCanvas = document.getElementById("evalScoreChart");
 const chartEmptyHintEl = document.getElementById("evalChartEmptyHint");
 
+const metricTooltipEl = document.getElementById("evalMetricTooltip");
+const metricTooltipTitleEl = document.getElementById("evalMetricTooltipTitle");
+const metricTooltipBodyEl = document.getElementById("evalMetricTooltipBody");
+
+// How each metric is calculated, keyed by the card's data-metric attribute.
+// Kept to 3-5 short lines each; wording mirrors rag/evaluation.py so the
+// explanations stay accurate to the actual computation.
+const METRIC_EXPLANATIONS = {
+  recall: {
+    title: "Recall@K",
+    body: "Of all the ground-truth passages for a question, the fraction that appear in the top-K retrieved citations. Computed as matched ground-truth items ÷ total ground-truth items. Needs a test case with ground truth. Higher is better (1.0 = every expected passage was retrieved).",
+  },
+  precision: {
+    title: "Precision@K",
+    body: "Of the top-K citations actually retrieved, the fraction that match a ground-truth passage. Computed as matched items ÷ retrieved items. Measures how much of what you retrieved was relevant. Higher is better (1.0 = no irrelevant passages retrieved).",
+  },
+  mrr: {
+    title: "MRR (Mean Reciprocal Rank)",
+    body: "1 divided by the rank of the first correct citation (1st place = 1.0, 2nd = 0.5, 3rd = 0.33, …). Rewards putting a relevant passage near the top. 0 if no correct passage is retrieved. Averaged across runs.",
+  },
+  faithfulness: {
+    title: "Faithfulness",
+    body: "An LLM judge scores 0-1 whether the answer only states things supported by the retrieved context (no unsupported additions). Requires judge scoring enabled on the run. Higher is better.",
+  },
+  relevance: {
+    title: "Relevance",
+    body: "An LLM judge scores 0-1 whether the answer actually addresses the question that was asked, rather than drifting off-topic. Requires judge scoring enabled. Higher is better.",
+  },
+  groundedness: {
+    title: "Groundedness",
+    body: "An LLM judge scores 0-1 whether every specific claim in the answer is traceable to a specific citation. Requires judge scoring enabled. Higher is better.",
+  },
+  correctness: {
+    title: "Correctness",
+    body: "An LLM judge scores 0-1 how well the answer matches the human-written expected answer. Only computed when a test case includes an expected answer; otherwise null (shown as –). Higher is better.",
+  },
+  citation_accuracy: {
+    title: "Citation Accuracy",
+    body: "An LLM judge scores 0-1 whether the cited passages actually contain the information used to answer. Catches citations that look relevant but don't support the claim. Requires judge scoring enabled. Higher is better.",
+  },
+  hallucination: {
+    title: "Hallucination Rate",
+    body: "An LLM judge estimates the fraction of the answer that is fabricated or unsupported by the context/citations. Unlike the others, LOWER is better (0.0 = nothing fabricated, 1.0 = fully hallucinated).",
+  },
+  pass_rate: {
+    title: "Pass rate (human)",
+    body: "The percentage of graded runs a human marked as Pass (Pass ÷ graded runs). Ungraded runs are excluded. This is your manual quality signal, independent of the LLM judge. Higher is better.",
+  },
+  total_runs: {
+    title: "Total runs",
+    body: "The number of evaluation runs recorded for the selected provider, including failed runs. Every question you run (ad-hoc or from a saved case) adds one run to this count.",
+  },
+  avg_latency: {
+    title: "Avg latency",
+    body: "The mean wall-clock time for the pipeline to answer a question, measured server-side around the answer call and averaged across all runs. Lower is better.",
+  },
+  avg_cost: {
+    title: "Avg cost / query",
+    body: "The mean estimated USD cost per run, from token usage priced via rag/pricing.py. Local (Ollama) runs are $0. Runs with no known pricing are skipped in the average. Lower is better.",
+  },
+  error_rate: {
+    title: "Error rate",
+    body: "The percentage of runs that failed with an error (error runs ÷ total runs). A pipeline failure is still recorded as a run so it counts here rather than being silently dropped. Lower is better.",
+  },
+};
+
+function positionMetricTooltip(cardEl) {
+  const rect = cardEl.getBoundingClientRect();
+  // Show first (still hidden via visibility) to measure, then place below the
+  // card, clamped to the viewport so it never runs off-screen.
+  metricTooltipEl.classList.remove("hidden");
+  const ttRect = metricTooltipEl.getBoundingClientRect();
+  const margin = 8;
+  let left = rect.left;
+  if (left + ttRect.width > window.innerWidth - margin) {
+    left = window.innerWidth - margin - ttRect.width;
+  }
+  left = Math.max(margin, left);
+
+  let top = rect.bottom + 8;
+  if (top + ttRect.height > window.innerHeight - margin) {
+    // Not enough room below; place above the card instead.
+    top = rect.top - ttRect.height - 8;
+  }
+  metricTooltipEl.style.left = `${left}px`;
+  metricTooltipEl.style.top = `${top}px`;
+}
+
+function showMetricTooltip(cardEl) {
+  const key = cardEl.dataset.metric;
+  const info = METRIC_EXPLANATIONS[key];
+  if (!info) return;
+  metricTooltipTitleEl.textContent = info.title;
+  metricTooltipBodyEl.textContent = info.body;
+  positionMetricTooltip(cardEl);
+}
+
+function hideMetricTooltip() {
+  metricTooltipEl.classList.add("hidden");
+}
+
+function initMetricTooltips() {
+  const cards = document.querySelectorAll("#view-evaluation .summary-card[data-metric]");
+  for (const card of cards) {
+    card.addEventListener("mouseenter", () => showMetricTooltip(card));
+    card.addEventListener("mouseleave", hideMetricTooltip);
+    // Keyboard/focus accessibility: tabbing to a card reveals its explanation.
+    card.setAttribute("tabindex", "0");
+    card.addEventListener("focus", () => showMetricTooltip(card));
+    card.addEventListener("blur", hideMetricTooltip);
+  }
+}
+
 let loaded = false;
 let evalView = "card"; // "card" | "graph"
 let scoreChart = null;
@@ -430,6 +543,8 @@ async function runEvaluation(question, testCase = null) {
 }
 
 export function initEvaluation() {
+  initMetricTooltips();
+
   viewToggleEl.addEventListener("click", (e) => {
     const btn = e.target.closest(".view-toggle-btn");
     if (!btn) return;
@@ -494,4 +609,35 @@ export function activateEvaluation() {
   loadCases();
   loadHistory({ resetPage: true });
   loadSummary();
+}
+
+/**
+ * Wipe all rendered evaluation data + cached state so a signed-out (or
+ * newly signed-in) user never sees the previous session's dashboard.
+ * Called from the sign-out handler in authView.js.
+ */
+export function clearEvaluation() {
+  loaded = false;
+  latestSummary = null;
+  fullHistory = [];
+  historyPage = 1;
+
+  caseListEl.replaceChildren();
+  historyListEl.replaceChildren();
+  runResultEl.classList.add("hidden");
+  runResultEl.textContent = "";
+  if (pageStatusEl) pageStatusEl.textContent = "";
+
+  // Reset all summary metric tiles to their empty placeholder.
+  const dash = "–";
+  [
+    totalRunsEl, passRateEl, avgLatencyEl, avgCostEl, errorRateEl,
+    recallEl, precisionEl, mrrEl, faithfulnessEl, relevanceEl,
+    groundednessEl, correctnessEl, citationAccuracyEl, hallucinationEl,
+  ].forEach((el) => { if (el) el.textContent = dash; });
+
+  if (scoreChart) {
+    scoreChart.destroy();
+    scoreChart = null;
+  }
 }

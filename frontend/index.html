@@ -5,7 +5,7 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0" />
     <title>Go Invoice</title>
     <link rel="icon" type="image/png" href="/frontend/assets/logo.png" />
-    <link rel="stylesheet" href="/frontend/styles.css?v=2" />
+    <link rel="stylesheet" href="/frontend/styles.css?v=5" />
   </head>
   <body>
     <header class="topbar">
@@ -89,46 +89,52 @@
 
           <!-- Card view: Retrieval + Generation + Quality score metrics, 5 per row so 10 items fit in 2 rows -->
           <div class="eval-score-grid" id="evalScoreGridCard">
-            <div class="card summary-card metric-retrieval">
+            <div class="card summary-card metric-retrieval" data-metric="recall">
               <span class="summary-label">Recall@K</span>
               <span class="summary-value" id="evalRecall">–</span>
             </div>
-            <div class="card summary-card metric-retrieval">
+            <div class="card summary-card metric-retrieval" data-metric="precision">
               <span class="summary-label">Precision@K</span>
               <span class="summary-value" id="evalPrecision">–</span>
             </div>
-            <div class="card summary-card metric-retrieval">
+            <div class="card summary-card metric-retrieval" data-metric="mrr">
               <span class="summary-label">MRR</span>
               <span class="summary-value" id="evalMrr">–</span>
             </div>
-            <div class="card summary-card metric-generation">
+            <div class="card summary-card metric-generation" data-metric="faithfulness">
               <span class="summary-label">Faithfulness</span>
               <span class="summary-value" id="evalFaithfulness">–</span>
             </div>
-            <div class="card summary-card metric-generation">
+            <div class="card summary-card metric-generation" data-metric="relevance">
               <span class="summary-label">Relevance</span>
               <span class="summary-value" id="evalRelevance">–</span>
             </div>
-            <div class="card summary-card metric-generation">
+            <div class="card summary-card metric-generation" data-metric="groundedness">
               <span class="summary-label">Groundedness</span>
               <span class="summary-value" id="evalGroundedness">–</span>
             </div>
-            <div class="card summary-card metric-quality">
+            <div class="card summary-card metric-quality" data-metric="correctness">
               <span class="summary-label">Correctness</span>
               <span class="summary-value" id="evalCorrectness">–</span>
             </div>
-            <div class="card summary-card metric-quality">
+            <div class="card summary-card metric-quality" data-metric="citation_accuracy">
               <span class="summary-label">Citation Acc.</span>
               <span class="summary-value" id="evalCitationAccuracy">–</span>
             </div>
-            <div class="card summary-card metric-quality">
+            <div class="card summary-card metric-quality" data-metric="hallucination">
               <span class="summary-label">Hallucination</span>
               <span class="summary-value" id="evalHallucination">–</span>
             </div>
-            <div class="card summary-card metric-quality">
+            <div class="card summary-card metric-quality" data-metric="pass_rate">
               <span class="summary-label">Pass rate (human)</span>
               <span class="summary-value" id="evalPassRate">–</span>
             </div>
+          </div>
+
+          <!-- Shared hover tooltip explaining how each metric is calculated -->
+          <div class="metric-tooltip hidden" id="evalMetricTooltip" role="tooltip">
+            <p class="metric-tooltip-title" id="evalMetricTooltipTitle"></p>
+            <p class="metric-tooltip-body" id="evalMetricTooltipBody"></p>
           </div>
 
           <!-- Graph view: same metrics as a grouped bar chart, colored by category legend above -->
@@ -140,19 +146,19 @@
           <div class="eval-metric-group system-metric-group">
             <h3>System</h3>
             <div class="card-grid summary-grid">
-              <div class="card summary-card">
+              <div class="card summary-card" data-metric="total_runs">
                 <span class="summary-label">Total runs</span>
                 <span class="summary-value" id="evalTotalRuns">0</span>
               </div>
-              <div class="card summary-card">
+              <div class="card summary-card" data-metric="avg_latency">
                 <span class="summary-label">Avg latency</span>
                 <span class="summary-value" id="evalAvgLatency">0 ms</span>
               </div>
-              <div class="card summary-card">
+              <div class="card summary-card" data-metric="avg_cost">
                 <span class="summary-label">Avg cost / query</span>
                 <span class="summary-value" id="evalAvgCost">–</span>
               </div>
-              <div class="card summary-card">
+              <div class="card summary-card" data-metric="error_rate">
                 <span class="summary-label">Error rate</span>
                 <span class="summary-value" id="evalErrorRate">–</span>
               </div>
@@ -228,7 +234,7 @@
         <div class="view-inner view-inner-narrow">
           <div class="view-header">
             <h1>Account</h1>
-            <p class="subtitle">Sign in with AWS Cognito to access Go Invoice.</p>
+            <p class="subtitle">Sign in with your email and password to access Go Invoice.</p>
           </div>
 
           <div class="card auth-card" id="authDevModePanel">
@@ -238,11 +244,48 @@
           </div>
 
           <div class="card auth-card hidden" id="authLoggedOutPanel">
-            <h2>Sign in</h2>
-            <p>Continue with email &amp; password, or your organization's SSO, via the AWS Cognito hosted sign-in page.</p>
-            <div class="auth-actions">
-              <button id="signInEmailBtn" class="btn btn-primary btn-lg" type="button">Sign in with email</button>
-              <button id="signInSsoBtn" class="btn btn-secondary btn-lg hidden" type="button">Continue with SSO</button>
+            <!-- Login -->
+            <div id="authLoginForm">
+              <h2>Sign in</h2>
+              <p>Sign in with your email and password.</p>
+              <form id="loginForm" class="stacked-form">
+                <input id="loginEmail" type="email" placeholder="Email" autocomplete="username" required />
+                <input id="loginPassword" type="password" placeholder="Password" autocomplete="current-password" required />
+                <button type="submit" class="btn btn-primary">Sign in</button>
+              </form>
+              <p class="auth-switch">
+                No account? <button id="showSignupBtn" class="link-btn" type="button">Create one</button>
+              </p>
+              <div class="auth-actions">
+                <button id="signInSsoBtn" class="btn btn-secondary hidden" type="button">Continue with SSO</button>
+              </div>
+            </div>
+
+            <!-- Sign up -->
+            <div id="authSignupForm" class="hidden">
+              <h2>Create account</h2>
+              <p>Password needs 8+ characters with upper &amp; lowercase letters and a number.</p>
+              <form id="signupForm" class="stacked-form">
+                <input id="signupEmail" type="email" placeholder="Email" autocomplete="username" required />
+                <input id="signupPassword" type="password" placeholder="Password" autocomplete="new-password" required />
+                <button type="submit" class="btn btn-primary">Create account</button>
+              </form>
+              <p class="auth-switch">
+                Already have an account? <button id="showLoginBtn" class="link-btn" type="button">Sign in</button>
+              </p>
+            </div>
+
+            <!-- Confirm sign up (verification code) -->
+            <div id="authConfirmForm" class="hidden">
+              <h2>Verify your email</h2>
+              <p>We sent a confirmation code to <strong id="confirmEmailLabel"></strong>.</p>
+              <form id="confirmForm" class="stacked-form">
+                <input id="confirmCode" type="text" inputmode="numeric" placeholder="Confirmation code" required />
+                <button type="submit" class="btn btn-primary">Verify</button>
+              </form>
+              <p class="auth-switch">
+                Didn't get a code? <button id="resendCodeBtn" class="link-btn" type="button">Resend code</button>
+              </p>
             </div>
           </div>
 

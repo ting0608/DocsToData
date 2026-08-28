@@ -59,15 +59,15 @@ Parameters:
       '
   AllowedCallbackUrls:
     Type: CommaDelimitedList
-    Default: http://localhost:8080/
-    Description: 'URLs Cognito is allowed to redirect back to after login. Add your
-      Amplify Hosting URL (with trailing slash, matching frontend/js/auth.js''s redirectUri())
-      once known, comma-separated.
+    Default: http://localhost:8080/,https://main.d1qde2fcqwilav.amplifyapp.com/
+    Description: 'URLs Cognito is allowed to redirect back to after login (Hosted
+      UI/SSO flow only; the in-app email/password login does not redirect). Comma-separated,
+      matching frontend/js/auth.js''s redirectUri().
 
       '
   AllowedLogoutUrls:
     Type: CommaDelimitedList
-    Default: http://localhost:8080/
+    Default: http://localhost:8080/,https://main.d1qde2fcqwilav.amplifyapp.com/
     Description: Same as AllowedCallbackUrls, but for post-logout redirects.
   BudgetAlertEmail:
     Type: String
@@ -135,8 +135,7 @@ Resources:
     Type: AWS::Cognito::UserPool
     Condition: CognitoEnabled
     Properties:
-      UserPoolName:
-        Fn::Sub: ${AWS::StackName}-users
+      UserPoolName: go-invoice-users
       UsernameAttributes:
       - email
       AutoVerifiedAttributes:
@@ -158,6 +157,7 @@ Resources:
         Ref: UserPool
       GenerateSecret: false
       ExplicitAuthFlows:
+      - ALLOW_USER_PASSWORD_AUTH
       - ALLOW_USER_SRP_AUTH
       - ALLOW_REFRESH_TOKEN_AUTH
       AllowedOAuthFlows:
